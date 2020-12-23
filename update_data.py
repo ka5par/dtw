@@ -1,9 +1,8 @@
-# Get list of sp500 companies
-# Download last 365 calendar day daily info (Date,High,Low,Open,Close,Volume,Adj Close)
+
+# Download data from Yahoo/Investing.
 # Put tickers into data/stocks_cfs
-# Put ticker data it into a folder name data/stock_cfs.
 # Compiles the data together saves the adjusted closes.
-# Get DtD diffs and normalizes the data between -1 and 1.
+# Calculate returns
 
 # Links:
 # https://stackoverflow.com/questions/54854276/no-data-fetched-web-datareader-panda
@@ -14,6 +13,7 @@
 import numpy as np
 import pandas as pd
 import pandas_datareader.data as web
+import investpy
 
 import datetime as dt
 import os
@@ -23,76 +23,55 @@ import pickle
 from tqdm import trange
 
 
-def save_sp500_tickers(purge=False):
-
-    if purge:
-        if os.path.exists("data/stock_dfs"):
-            shutil.rmtree("data/stock_dfs")
-        if os.path.exists("data/sp500.csv"):
-            os.remove("data/sp500.csv")
-
-    table = pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')
-    df = table[0]
+def get_data_from_yahoo(tickers, years=15):
 
     if not os.path.exists('data/stock_dfs'):
         os.makedirs('data/stock_dfs')
 
-    df.to_csv("data/sp500.csv", index=False)
-    tickers = list(df['Symbol'])
-
-    with open("data/sp500tickers.pickle", "wb") as f:
-        pickle.dump(tickers, f)
-
-    return tickers
-
-
-def get_data_from_yahoo(reload_sp500=False, companies=True, years=15):
-
-    if companies:
-        if reload_sp500:
-            tickers = save_sp500_tickers(reload_sp500)
-        else:
-            with open("data/sp500tickers.pickle", "rb") as f:
-                tickers = pickle.load(f)
-
     start = dt.datetime.now() - dt.timedelta(days=years*365)
     end = dt.datetime.now()
-    errors = []
-    print("Starting update.")
+    print("Downloading from yahoo.")
 
-    if companies:
-        for i in trange(len(tickers)):
-            ticker = tickers[i]
-            if not os.path.exists('data/stock_dfs/{}.csv'.format(ticker)):
-                try:
-                    df = web.get_data_yahoo(str(ticker), start, end)
-                    df.reset_index(inplace=True)
-                    df.set_index("Date", inplace=True)
-                    df.to_csv('data/stock_dfs/{}.csv'.format(ticker))
-                except KeyError:
-                    errors.append(ticker)
-                    continue
-        print("Errors:", errors)
-    else:
-        df = web.get_data_yahoo("^GSPC", start, end)
-        df.reset_index(inplace=True)
-        df.set_index("Date", inplace=True)
-        df.to_csv('data/stock_dfs/sp500.csv')
+    for i in trange(len(tickers)):
+        ticker = tickers[i]
+        if not os.path.exists('data/stock_dfs/{}.csv'.format(ticker)):
+            df = web.get_data_yahoo(str(ticker), start, end)
+            df.reset_index(inplace=True)
+            df.set_index("Date", inplace=True)
+            df.to_csv('data/stock_dfs/{}.csv'.format(ticker))
 
 
-def compile_data(companies=True):
-    if companies:
-        with open("data/sp500tickers.pickle", "rb") as f:
-            tickers = pickle.load(f)
-    else:
-        tickers = ["sp500"]
+def get_data_from_investing(tickers, countries, years=15, t_type="index"):
+
+    if t_type != "index":
+        print("Currently, only work with indexes from investing.com.")
+        return
+
+    if not os.path.exists('data/stock_dfs'):
+        os.makedirs('data/stock_dfs')
+
+    start = dt.datetime.now() - dt.timedelta(days=years * 365)
+    end = dt.datetime.now()
+    print("Downloading from investing.com")
+
+    for i in trange(len(tickers)):
+        ticker = tickers[i]
+        if not os.path.exists('data/stock_dfs/{}.csv'.format(ticker)):
+            df = investpy.get_index_historical_data(index=ticker, from_date=str(start.strftime("%d/%m/%Y")),
+                                                    to_date=str(end.strftime("%d/%m/%Y")),
+                                                    country=countries[i])
+            df.reset_index(inplace=True)
+            df.set_index("Date", inplace=True)
+            df.to_csv('data/stock_dfs/{}.csv'.format(ticker))
+
+
+def compile_data(tickers):
 
     df = pd.DataFrame()
     print("Compiling Adjusted Close.", "/n")
 
     for i in trange(len(tickers)):
         ticker = tickers[i]
-
         try:
             temp = pd.read_csv('data/stock_dfs/{}.csv'.format(ticker))
         except FileNotFoundError:
@@ -107,24 +86,17 @@ def compile_data(companies=True):
             df = temp
         else:
             df = df.join(temp, how='outer')
+
     df["monthID"] = pd.to_datetime(df.index.values).year*100 + pd.to_datetime(df.index.values).month
-    df.to_csv("data/combined_sp500.csv")
+    df.to_csv("data/combined_data.csv")
+
     return df
 
 
-def normalize_data(companies=True):
-    df = compile_data(companies)
-    print("Percentage change and normalize.")
-    df_diff = df.pct_change().iloc[1:].fillna(0)  # Drop first row and nan is 0
-    df_norm = df_diff.apply(lambda x: (x - np.mean(x)) / (np.max(x) - np.min(x)))
+def calculate_returns(file):
 
-    df_norm["monthID"] = pd.to_datetime(df_norm.index.values).year * 100 + pd.to_datetime(df_norm.index.values).month
-    df_norm.to_csv("data/normalized_sp500.csv")
-
-
-def calculate_returns(stocks):
-    print("Calculate returns.")
-    df = pd.read_csv(stocks, index_col=0)
+    print("Calculating returns.")
+    df = pd.read_csv(file, index_col=0)
     df.index = pd.to_datetime(df.index)
     returns = df.loc[df.groupby(df.index.to_period('M')).apply(lambda x: x.index.max())]  # https://stackoverflow.com/questions/48288059/how-to-get-last-day-of-each-month-in-pandas-dataframe-index-using-timegrouper
     returns = returns.pct_change()
@@ -133,6 +105,16 @@ def calculate_returns(stocks):
     returns.to_csv("data/next_month_returns.csv")
 
 
-get_data_from_yahoo(companies=False, years=40)
-normalize_data(False)
-calculate_returns("data/combined_sp500.csv")
+tickers_yahoo = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225", "^VIX"]
+
+# tickers_investing = ["S&P 500", "FTSE 100", "DAX", "CAC 40", "TOPIX"]
+# countries_investing = ["United States", "United Kingdom", "Germany", "France", "Japan"]
+
+# get_data_from_investing(tickers_investing, countries_investing, years=40)
+# compile_data(tickers_investing)
+
+
+get_data_from_yahoo(tickers_yahoo, years=40)
+compile_data(tickers_yahoo)
+
+calculate_returns("data/combined_data.csv")

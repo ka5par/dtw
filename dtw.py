@@ -1,3 +1,5 @@
+from typing import Optional, Any
+
 import numpy as np
 import pandas as pd
 
@@ -13,9 +15,9 @@ from functools import reduce
 # Calculate real return.
 # Proceed to next month and repeat 12 times.
 
-# https://github.com/MJeremy2017/machine-learning-models/blob/master/Dynamic-Time-Warping/dynamic-time-warping.py
 
 # Dynamic Time Warp
+# https://github.com/MJeremy2017/machine-learning-models/blob/master/Dynamic-Time-Warping/dynamic-time-warping.py
 @jit(forceobj=True)
 def dtw(s, t, window=15):
     n, m = len(s), len(t)
@@ -37,13 +39,65 @@ def dtw(s, t, window=15):
     return dtw_matrix[n, m]
 
 
-def twed(s, t):
-    return twed_matrix[n, m]
+@jit(forceobj=True)
+def dlp(a, b, p=2):
+    cost = np.sum(np.power(np.abs(a - b), p))
+    return np.power(cost, 1 / p)
 
 
-# cuTWED
-# cuda driven time warp edit distance.
-# using cuda because of the nature of O(n^2) which can be divided by the amount of cuda cores.
+# Time warp edit distance
+# https://en.wikipedia.org/wiki/Time_Warp_Edit_Distance
+@jit(forceobj=True)
+def twed(a, b, nu=1, _lambda=0.001):
+    time_sa = np.arange(len(a))
+    time_sb = np.arange(len(b))
+
+    # Add padding
+    a = np.array([0] + list(a))
+    time_sa = np.array([0] + list(time_sa))
+    b = np.array([0] + list(b))
+    time_sb = np.array([0] + list(time_sb))
+
+    n = len(a)
+    m = len(b)
+    # Dynamical programming
+    dp = np.zeros((n, m))
+
+    # Initialize DP Matrix and set first row and column to infinity
+    dp[0, :] = np.inf
+    dp[:, 0] = np.inf
+    dp[0, 0] = 0
+
+    # Compute minimal cost
+    for i in range(1, n):
+        for j in range(1, m):
+            # Calculate and save cost of various operations
+            c = np.ones((3, 1)) * np.inf
+            # Deletion in A
+            c[0] = (
+                dp[i - 1, j]
+                + dlp(a[i - 1], a[i])
+                + nu * (time_sa[i] - time_sa[i - 1])
+                + _lambda
+            )
+            # Deletion in B
+            c[1] = (
+                dp[i, j - 1]
+                + dlp(b[j - 1], b[j])
+                + nu * (time_sb[j] - time_sb[j - 1])
+                + _lambda
+            )
+            # Keep data points in both time series
+            c[2] = (
+                dp[i - 1, j - 1]
+                + dlp(a[i], b[j])
+                + dlp(a[i - 1], b[j - 1])
+                + nu * (abs(time_sa[i] - time_sb[j]) + abs(time_sa[i - 1] - time_sb[j - 1]))
+            )
+            # Choose the operation with the minimal cost and update DP Matrix
+            dp[i, j] = np.min(c)
+    distance = dp[n - 1, m - 1]
+    return distance
 
 
 # aux functions
@@ -56,102 +110,6 @@ def read_data(adj_close_file, returns_file, stock_f=None):
         return stocks_f, returns_f
     else:
         return stocks_f[["monthID", stock_f]], returns_f[["monthID", stock_f]]
-
-
-def calculate_distances_dtw(train_x, train_y, test_x, train_labels, predict_id):
-    distances_f = np.zeros([len(train_labels), 3])
-
-    for count, unique_id in enumerate(train_labels):
-        distances_f[count, 0] = unique_id
-        distances_f[count, 1] = dtw(train_x[train_x["monthID"] == unique_id]["sp500"],
-                                    test_x[test_x["monthID"] == predict_id]["sp500"])
-        distances_f[count, 2] = train_y[train_y["monthID"] == unique_id]["sp500"]
-
-    output = pd.DataFrame(distances_f)
-    output.columns = ["monthID", "distance_dtw", "returns"]
-
-    return output
-
-
-def knn(distances_f, column):
-
-    predictions = np.zeros(10)
-    for neighbours in range(1, 10):
-        neigh = KNeighborsRegressor(n_neighbors=neighbours, weights='distance')
-        neigh.fit(np.array(distances_f[column]).reshape(-1, 1), np.array(distances_f.returns))
-        predictions[neighbours - 1] = neigh.predict([[np.mean(np.sort(np.array(distances_f[column]))[:neighbours])]])
-
-    if np.sum(predictions > 0) >= 5:
-        return 1
-    else:
-        return -1
-
-
-#  https://github.com/kfirkfir/k-Star-Nearest-Neighbors/blob/master/kStarNN.m
-def kstar(distances_f, L_C):
-    predictions = np.zeros(len(L_C))
-    for count, lc in enumerate(L_C):
-        distances_f = distances_f.sort_values(by=["distance_dtw"])
-
-        n = len(distances_f)
-
-        beta = lc * distances_f.distance_dtw
-        l_lambda = beta[1] + 1  # Otherwise it will never go into the while loop - go figure research papers...
-        k, sum_beta, sum_beta_square = 0, 0, 0
-        np.seterr(invalid='ignore')  # High change sqrt has negative value in it.
-        while l_lambda > beta[k + 1] and k <= n - 3: #  -3 because otherwise will run into issues.
-            k += 1
-            sum_beta = sum_beta + beta[k]
-            sum_beta_square = sum_beta_square + (beta[k]) ** 2
-            l_lambda = (1 / k) * (sum_beta * np.sqrt(k + sum_beta ** 2 - k * sum_beta_square))
-        alpha = np.zeros(n)
-        for i in range(n):
-            alpha[i] = max(l_lambda - lc * distances_f.distance_dtw[i], 0)
-
-        predictions[count] = np.sum(alpha * distances_f.returns)
-
-    if np.sum(predictions > 0) >= 4:
-        return 1
-    else:
-        return -1
-
-
-def predict_trades_knn(type_train, train_x, train_y, test_x, train_labels, test_labels):
-    trades = np.zeros([len(test_labels), 2])
-
-    if type_train == "DTW":
-        for count, predict_id in enumerate(tqdm(test_labels)):
-            distances = calculate_distances_dtw(train_x,
-                                                train_y,
-                                                test_x,
-                                                train_labels,
-                                                predict_id)
-            trades[count, 0] = predict_id
-            trades[count, 1] = knn(distances, "distance_dtw")
-
-    output = pd.DataFrame(trades)
-    output.columns = ["monthID", "BuyOrSell"]
-
-    return output
-
-
-def predict_trades_kstar(type_train, train_x, train_y, test_x, train_labels, test_labels, L_C):
-    trades = np.zeros([len(test_labels), 2])
-
-    if type_train == "DTW":
-        for count, predict_id in enumerate(tqdm(test_labels)):
-            distances = calculate_distances_dtw(train_x,
-                                                train_y,
-                                                test_x,
-                                                train_labels,
-                                                predict_id)
-            trades[count, 0] = predict_id
-            trades[count, 1] = kstar(distances, L_C)
-
-    output = pd.DataFrame(trades)
-    output.columns = ["monthID", "BuyOrSell"]
-
-    return output
 
 
 def difference(df_stocks, tv_split=60):
@@ -173,7 +131,7 @@ def indexing(df_stocks, tv_split=60):
 
     for i in range(len(ids)):
         mask = df_index["monthID"] == ids[i]
-        df_index.loc[mask, "index"] = df_index.loc[mask, "sp500"] / last_month_closes[i]
+        df_index.loc[mask, "index"] = df_index.loc[mask, "sp500"] / last_month_closes[i]  # <-- get rid of sp500.
 
     df_index = df_index.dropna()
 
@@ -182,6 +140,90 @@ def indexing(df_stocks, tv_split=60):
     df_index.sp500 = df_index["index"]  # <-- get rid of this bs
 
     return df_index, train_ids, test_ids
+
+
+def calculate_distances(train_x, train_y, test_x, train_labels, predict_id):
+    distances_f = np.zeros([len(train_labels), 4])
+
+    for count, unique_id in enumerate(train_labels):
+        distances_f[count, 0] = unique_id
+        distances_f[count, 1] = dtw(train_x[train_x["monthID"] == unique_id]["sp500"],
+                                    test_x[test_x["monthID"] == predict_id]["sp500"])
+        distances_f[count, 2] = twed(train_x[train_x["monthID"] == unique_id]["sp500"],
+                                     test_x[test_x["monthID"] == predict_id]["sp500"])
+        distances_f[count, 3] = train_y[train_y["monthID"] == unique_id]["sp500"]
+
+    output = pd.DataFrame(distances_f)
+    output.columns = ["monthID", "distance_dtw", "distance_twed", "returns"]
+
+    return output
+
+
+def knn(distances_f, column):
+
+    predictions = np.zeros(10)
+    for neighbours in range(1, 11):
+        neigh = KNeighborsRegressor(n_neighbors=neighbours, weights='distance')
+        neigh.fit(np.array(distances_f[column]).reshape(-1, 1), np.array(distances_f.returns))
+        predictions[neighbours - 1] = neigh.predict([[np.mean(np.sort(np.array(distances_f[column]))[:neighbours])]])
+
+    if np.sum(predictions > 0) >= 5:
+        return 1
+    else:
+        return -1
+
+
+#  https://github.com/kfirkfir/k-Star-Nearest-Neighbors/blob/master/kStarNN.m
+def kstar(distances_f, column):
+
+    L_C = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10]
+    predictions = np.zeros(len(L_C))
+
+    for count, lc in enumerate(L_C):
+        distances_f = distances_f.sort_values(by=column)
+
+        n = len(distances_f)
+
+        beta = lc * distances_f.distance_dtw
+        l_lambda = beta[1] + 1  # Otherwise it will never go into the while loop - go figure research papers...
+        k, sum_beta, sum_beta_square = 0, 0, 0
+        np.seterr(invalid='ignore')  # High change sqrt has negative value in it.
+        while l_lambda > beta[k + 1] and k <= n - 3:  # -3 because otherwise will run into issues.
+            k += 1
+            sum_beta = sum_beta + beta[k]
+            sum_beta_square = sum_beta_square + (beta[k]) ** 2
+            l_lambda = (1 / k) * (sum_beta * np.sqrt(k + sum_beta ** 2 - k * sum_beta_square))
+        alpha = np.zeros(n)
+        for i in range(n):
+            alpha[i] = max(l_lambda - lc * distances_f[column][i], 0)
+
+        predictions[count] = np.sum(alpha * distances_f.returns)
+
+    if np.sum(predictions > 0) >= 4:
+        return 1
+    else:
+        return -1
+
+
+def predict_trades(type_train, train_x, train_y, test_x, train_labels, test_labels):
+    trades = np.zeros([len(test_labels), 5])
+
+    for count, predict_id in enumerate(tqdm(test_labels)):
+        distances = calculate_distances(train_x,
+                                        train_y,
+                                        test_x,
+                                        train_labels,
+                                        predict_id)
+        trades[count, 0] = predict_id
+        trades[count, 1] = knn(distances, "distance_dtw")
+        trades[count, 2] = knn(distances, "distance_twed")
+        trades[count, 3] = kstar(distances, "distance_dtw")
+        trades[count, 4] = kstar(distances, "distance_twed")
+
+    output = pd.DataFrame(trades)
+    output.columns = ["monthID", type_train+"dtw_knn", type_train+"twed_knn", type_train+"dtw_kstar", type_train+"twed_kstar"]
+
+    return output
 
 
 if __name__ == '__main__':
@@ -196,66 +238,35 @@ if __name__ == '__main__':
     diff_stocks, diff_train_ids, diff_test_ids = difference(stocks, tv_split=months_out_of_sample)
     index_stocks, index_train_ids, index_test_ids = indexing(stocks, tv_split=months_out_of_sample)
 
-    L_C = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10]  # Anava & Levy
-
-    print("DTW KNN")
-    trade_predictions_dtw = predict_trades_knn("DTW",
-                                               stocks[stocks["monthID"].isin(train_ids)],
-                                               returns[returns["monthID"].isin(train_ids)],
-                                               stocks[stocks["monthID"].isin(test_ids)],
-                                               train_ids,
-                                               test_ids
-                                               )
-    print("DDTW KNN")
-    trade_predictions_ddtw = predict_trades_knn("DTW",
-                                                diff_stocks[diff_stocks["monthID"].isin(diff_train_ids)],
-                                                returns[returns["monthID"].isin(diff_train_ids)],
-                                                diff_stocks[diff_stocks["monthID"].isin(diff_test_ids)],
-                                                diff_train_ids,
-                                                diff_test_ids
-                                                )
-    print("IDTW KNN")
-    trade_predictions_idtw = predict_trades_knn("DTW",
+    print("DTW")
+    trade_predictions_dtw = predict_trades("DTW",
+                                           stocks[stocks["monthID"].isin(train_ids)],
+                                           returns[returns["monthID"].isin(train_ids)],
+                                           stocks[stocks["monthID"].isin(test_ids)],
+                                           train_ids,
+                                           test_ids
+                                           )
+    print("DDTW")
+    trade_predictions_ddtw = predict_trades("DDTW",
+                                            diff_stocks[diff_stocks["monthID"].isin(diff_train_ids)],
+                                            returns[returns["monthID"].isin(diff_train_ids)],
+                                            diff_stocks[diff_stocks["monthID"].isin(diff_test_ids)],
+                                            diff_train_ids,
+                                            diff_test_ids
+                                            )
+    print("IDTW")
+    trade_predictions_idtw = predict_trades("IDTW",
                                                 index_stocks[index_stocks["monthID"].isin(index_train_ids)],
                                                 returns[returns["monthID"].isin(index_train_ids)],
                                                 index_stocks[index_stocks["monthID"].isin(index_test_ids)],
                                                 index_train_ids,
                                                 index_test_ids
                                                 )
-    print("DTW K*NN")
-    trade_predictions_dtw_kstar = predict_trades_kstar("DTW",
-                                                       stocks[stocks["monthID"].isin(train_ids)],
-                                                       returns[returns["monthID"].isin(train_ids)],
-                                                       stocks[stocks["monthID"].isin(test_ids)],
-                                                       train_ids,
-                                                       test_ids,
-                                                       L_C
-                                                       )
-    print("DDTW K*NN")
-    trade_predictions_ddtw_kstar = predict_trades_kstar("DTW",
-                                                        diff_stocks[diff_stocks["monthID"].isin(diff_train_ids)],
-                                                        returns[returns["monthID"].isin(diff_train_ids)],
-                                                        diff_stocks[diff_stocks["monthID"].isin(diff_test_ids)],
-                                                        diff_train_ids,
-                                                        diff_test_ids,
-                                                        L_C
-                                                        )
-    print("IDTW K*NN")
-    trade_predictions_idtw_kstar = predict_trades_kstar("DTW",
-                                                        index_stocks[index_stocks["monthID"].isin(index_train_ids)],
-                                                        returns[returns["monthID"].isin(index_train_ids)],
-                                                        index_stocks[index_stocks["monthID"].isin(index_test_ids)],
-                                                        index_train_ids,
-                                                        index_test_ids,
-                                                        L_C
-                                                        )
 
+    trade_predictions_dtw.to_csv("data/test.csv")
     data_frames = [trade_predictions_dtw,
                    trade_predictions_ddtw,
-                   trade_predictions_idtw,
-                   trade_predictions_dtw_kstar,
-                   trade_predictions_ddtw_kstar,
-                   trade_predictions_idtw_kstar]
+                   trade_predictions_idtw]
 
     df_merged = reduce(lambda left, right: pd.merge(left, right, on=['monthID'], how='outer'), data_frames)
 
