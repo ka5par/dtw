@@ -1,5 +1,4 @@
-# User-specific stuff:
-.idea
-data
+data 
 *.pdf
 sound_*
+.idea/*
