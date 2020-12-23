@@ -121,6 +121,7 @@ def difference(df_stocks, tv_split=60):
     return df_diff, train_ids, test_ids
 
 
+
 def indexing(df_stocks, tv_split=60):
     df_index = df_stocks
     df_index.index = pd.to_datetime(df_index.index)
