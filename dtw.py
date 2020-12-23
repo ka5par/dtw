@@ -111,7 +111,6 @@ def read_data(adj_close_file, returns_file, stock_f=None):
     else:
         return stocks_f[["monthID", stock_f]], returns_f[["monthID", stock_f]]
 
-
 def difference(df_stocks, tv_split=60):
     df_diff = df_stocks.diff().iloc[1:].fillna(0)  # First row is NA for
     df_diff["monthID"] = df_stocks["monthID"].iloc[1:]
