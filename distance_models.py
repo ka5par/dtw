@@ -7,6 +7,7 @@ import numpy as np
 @jit(forceobj=True)
 def dtw(s, t, window=15):
     n, m = len(s), len(t)
+
     w = np.max([window, abs(n - m)])
     dtw_matrix = np.ones((n + 1, m + 1)) * np.inf
 
@@ -28,9 +29,13 @@ def dtw(s, t, window=15):
 # Time warp edit distance
 # https://en.wikipedia.org/wiki/Time_Warp_Edit_Distance
 @jit(forceobj=True)
-def twed(a, b, nu=1, _lambda=0.001):
-    time_sa = np.arange(len(a))
-    time_sb = np.arange(len(b))
+def twed(a, b, nu=1, _lambda=0.001, time_sa=None, time_sb=None, window=15):
+
+    if time_sa is None:
+        time_sa = np.arange(len(a))
+
+    if time_sb is None:
+        time_sb = np.arange(len(b))
 
     # Add padding
     a = np.array([0] + list(a))
@@ -38,8 +43,10 @@ def twed(a, b, nu=1, _lambda=0.001):
     b = np.array([0] + list(b))
     time_sb = np.array([0] + list(time_sb))
 
-    n = len(a)
-    m = len(b)
+    n, m = len(a), len(b)
+
+    w = np.max([window, abs(n - m)])
+
     # Dynamical programming
     dp = np.zeros((n, m))
 
@@ -53,30 +60,36 @@ def twed(a, b, nu=1, _lambda=0.001):
         for j in range(1, m):
             # Calculate and save cost of various operations
             c = np.ones((3, 1)) * np.inf
+
             # Deletion in A
             c[0] = (
-                dp[i - 1, j]
-                + dlp(a[i - 1], a[i])
-                + nu * (time_sa[i] - time_sa[i - 1])
-                + _lambda
+                    dp[i - 1, j]
+                    + dlp(a[i - 1], a[i])
+                    + nu * (time_sa[i] - time_sa[i - 1])
+                    + _lambda
             )
+
             # Deletion in B
             c[1] = (
-                dp[i, j - 1]
-                + dlp(b[j - 1], b[j])
-                + nu * (time_sb[j] - time_sb[j - 1])
-                + _lambda
+                    dp[i, j - 1]
+                    + dlp(b[j - 1], b[j])
+                    + nu * (time_sb[j] - time_sb[j - 1])
+                    + _lambda
             )
+
             # Keep data points in both time series
             c[2] = (
-                dp[i - 1, j - 1]
-                + dlp(a[i], b[j])
-                + dlp(a[i - 1], b[j - 1])
-                + nu * (abs(time_sa[i] - time_sb[j]) + abs(time_sa[i - 1] - time_sb[j - 1]))
+                    dp[i - 1, j - 1]
+                    + dlp(a[i], b[j])
+                    + dlp(a[i - 1], b[j - 1])
+                    + nu * (abs(time_sa[i] - time_sb[j]) + abs(time_sa[i - 1] - time_sb[j - 1]))
             )
+
             # Choose the operation with the minimal cost and update DP Matrix
             dp[i, j] = np.min(c)
+
     distance = dp[n - 1, m - 1]
+
     return distance
 
 

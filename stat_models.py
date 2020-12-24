@@ -1,7 +1,12 @@
 import numpy as np
 from sklearn.neighbors import KNeighborsRegressor
+from numba import jit
 
 
+# //TODO #5 fix k*nn, something up with it.
+
+
+@jit(forceobj=True)
 def knn(distances, column):
     predictions = np.zeros(10)
     for neighbours in range(1, 11):
@@ -16,6 +21,7 @@ def knn(distances, column):
 
 
 #  https://github.com/kfirkfir/k-Star-Nearest-Neighbors/blob/master/kStarNN.m
+@jit(forceobj=True)
 def kstar(distances, column):
 
     l_c = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10]

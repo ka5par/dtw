@@ -1,20 +1,25 @@
 from matplotlib import pyplot as plt
+
+import datetime as dt
 import numpy as np
 import pandas as pd
-import tabulate
+
+
+# import tabulate #  If need to pretty pring markdown.
+
+# //TODO #6 cmd line arguments,
+# //TODO create accuracy csvs.
 
 
 def convert_orders_to_cum_return(orders, underlying_returns):
     cum_returns = underlying_returns + 1
     cum_returns[0] = 1 + underlying_returns[0]
-
     for i in range(1, len(cum_returns)):
         cum_returns[i] = cum_returns[i - 1] * (1 + underlying_returns[i] * orders[i])
-
     return cum_returns
 
 
-def plot_lines(df, plot_title, plot_filter=None):
+def plot_lines(df, plot_title, baseline, plot_filter=None):
     plt.figure(figsize=(12, 12))
     if plot_filter is None:
         plt.plot(df)
@@ -28,54 +33,69 @@ def plot_lines(df, plot_title, plot_filter=None):
     plt.show()
 
 
-# Read in the data
-next_returns = pd.read_csv("data/next_month_returns.csv")
-b_s_orders = pd.read_csv("data/trade_preds.csv")
+def main(stock_index):
+    next_returns = pd.read_csv("data/returns/{}.csv".format(stock_index))
+    b_s_orders = pd.read_csv("data/predictions/{}_predictions.csv".format(stock_index))
 
-# Correct the returns to actual returns
-actual_returns = next_returns.copy()
-actual_returns.sp500 = next_returns.sp500.shift(1)  # <-- get rid of sp500
+    # Correct the returns to actual returns
+    actual_returns = next_returns.copy()
+    actual_returns["Returns"] = next_returns.Returns.shift(1)
 
-b_s_orders = pd.merge(b_s_orders, actual_returns, how="left", on="monthID")
+    b_s_orders = pd.merge(b_s_orders, actual_returns, how="left", on="monthID")
 
-baseline = convert_orders_to_cum_return(np.ones(len(b_s_orders)), np.array(b_s_orders["sp500"]))  # <-- get rid of sp500
-perfect = convert_orders_to_cum_return(np.array(b_s_orders["sp500"] > 0), np.array(b_s_orders["sp500"]))  # <-- get rid of sp500
-columns = np.array(b_s_orders.columns[b_s_orders.columns.str.contains("DTW")])
+    years = np.array(b_s_orders.monthID // 100).astype(int)
+    months = np.array(b_s_orders.monthID % 100).astype(int)
+    b_s_orders["Date"] = [dt.datetime(years[i], months[i], 1) for i in range(len(years))]
+    b_s_orders["Labels"] = b_s_orders["data_normalization"] + " " + b_s_orders["distance_model"] + " " + b_s_orders["stat_model"]
 
-trading_cum_returns = pd.DataFrame(columns=columns)
+    mask = b_s_orders["Labels"] == b_s_orders["Labels"][0]
+    baseline_cum_returns = convert_orders_to_cum_return(np.ones(len(b_s_orders[mask])), np.array(b_s_orders[mask]["Returns"]))
+
+    # perfect_cum_returns = convert_orders_to_cum_return(np.array(b_s_orders["Returns"] > 0),
+    #                                                    np.array(b_s_orders["Returns"]))
+
+    b_s_orders["cum_returns"] = 0
+
+    for data_normalization in np.unique(b_s_orders.data_normalization):
+        for distance_model in np.unique(b_s_orders.distance_model):
+            for stat_model in np.unique(b_s_orders.stat_model):
+                mask = (b_s_orders["data_normalization"] == data_normalization) & \
+                       (b_s_orders["distance_model"] == distance_model) & \
+                       (b_s_orders["stat_model"] == stat_model)
+
+                b_s_orders.loc[mask, "cum_returns"] = convert_orders_to_cum_return(b_s_orders[mask]["result"].values,
+                                                                                   b_s_orders[mask]["Returns"].values)
+
+    plt.figure(figsize=(12, 12))
+    for spec_label in np.unique(b_s_orders["Labels"]):
+        mask = b_s_orders["Labels"] == spec_label
+        plt.plot(b_s_orders.Date[mask], b_s_orders.cum_returns[mask], label=spec_label)
+
+    plt.plot(b_s_orders.Date[mask], baseline_cum_returns, label="baseline",
+             linewidth=4.0, linestyle="--", color="r")
+
+    plt.legend()
+    plt.title("Cumulative returns of {} 2011-2020".format(stock_index))
+    plt.ylabel("Cumulative returns (%)")
+    plt.savefig('data/cumulative_returns_{}.png'.format(stock_index))
+
+    # accuracy = b_s_orders.copy()
+    # accuracy.index = accuracy.monthID
+    # perfect= accuracy["sp500"] > 0
+    # accuracy["baseline"] = 1
+    # date = accuracy["Date"]
+    # accuracy.drop(["monthID", "Date", "sp500"], axis=1, inplace=True)  # <-- get rid of sp500
+    #
+    # test = pd.DataFrame(np.sum(accuracy.isin(perfect))/len(accuracy))
+    # test.columns = ["accuracy"]
+    # test["distance_metric"] = ["dtw", "twed"]*6 + ["baseline"]
+    # test["stat_model"] = ["knn", "knn", "kstar", "kstar"]*3 + ["baseline"]
+    # test["normalization_method"] = ["none"]*4 + ["diff"]*4 + ["indexing"]*4 + ["baseline"]
+    # print(test.pivot_table(index=["distance_metric", "stat_model", "normalization_method"], aggfunc="mean").to_markdown())
 
 
-for column in columns:
-    trading_cum_returns[column] = convert_orders_to_cum_return(np.array(b_s_orders[column]),
-                                                               np.array(b_s_orders["sp500"]))
+if __name__ == '__main__':
+    yahoo_indexes = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225"]
 
-# trading_cum_returns["baseline"] = baseline
-# trading_cum_returns["perfect"] = perfect
-
-trading_cum_returns.index = pd.to_datetime(b_s_orders["Date"])
-
-
-# Filters
-columns_dtw = trading_cum_returns.columns[np.array(trading_cum_returns.columns.str.contains("DTWdtw|baseline", regex=True))]
-columns_twed = trading_cum_returns.columns[np.array(trading_cum_returns.columns.str.contains("DTWtwed|baseline", regex=True))]
-columns_over250 = trading_cum_returns.columns[(trading_cum_returns.iloc[-1] > 2.5)]
-
-
-plot_lines(trading_cum_returns, "S&P 500 Cumulative returns of ALL methods")
-plot_lines(trading_cum_returns, "S&P 500 Cumulative returns of DTW", columns_dtw)
-plot_lines(trading_cum_returns, "S&P 500 Cumulative returns of TWED", columns_twed)
-plot_lines(trading_cum_returns, "S&P 500 Cumulative returns that end with over 250%", columns_over250)
-
-accuracy = b_s_orders.copy()
-accuracy.index = accuracy.monthID
-perfect= accuracy["sp500"] > 0
-accuracy["baseline"] = 1
-date = accuracy["Date"]
-accuracy.drop(["monthID", "Date", "sp500"], axis=1, inplace=True)  # <-- get rid of sp500
-
-test = pd.DataFrame(np.sum(accuracy.isin(perfect))/len(accuracy))
-test.columns = ["accuracy"]
-test["distance_metric"] = ["dtw", "twed"]*6 + ["baseline"]
-test["stat_model"] = ["knn", "knn", "kstar", "kstar"]*3 + ["baseline"]
-test["normalization_method"] = ["none"]*4 + ["diff"]*4 + ["indexing"]*4 + ["baseline"]
-print(test.pivot_table(index=["distance_metric", "stat_model", "normalization_method"], aggfunc="mean").to_markdown())
+    for yahoo_index in yahoo_indexes:
+        main(yahoo_index)
