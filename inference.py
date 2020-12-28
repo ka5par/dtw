@@ -1,8 +1,11 @@
+from sklearn.metrics import accuracy_score, f1_score
 from matplotlib import pyplot as plt
+plt.style.use(['fivethirtyeight'])
 
 import datetime as dt
 import numpy as np
 import pandas as pd
+import os
 
 
 # import tabulate #  If need to pretty pring markdown.
@@ -19,21 +22,15 @@ def convert_orders_to_cum_return(orders, underlying_returns):
     return cum_returns
 
 
-def plot_lines(df, plot_title, baseline, plot_filter=None):
-    plt.figure(figsize=(12, 12))
-    if plot_filter is None:
-        plt.plot(df)
-        plt.plot(df.index, baseline, linewidth=4.0, linestyle="--", color="r")
-        plt.legend(list(df.columns) + ["baseline"])
-    else:
-        plt.plot(df[plot_filter])
-        plt.plot(df.index, baseline, linewidth=4.0, linestyle="--", color="r")
-        plt.legend(list(plot_filter) + ["baseline"])
-    plt.title(plot_title)
-    plt.show()
+# Create a date column for plotting
+def create_date_from_month_id(month_id):
+    years = np.array(month_id // 100).astype(int)
+    months = np.array(month_id % 100).astype(int)
+    return [dt.datetime(years[i], months[i], 1) for i in range(len(years))]
 
 
 def main(stock_index):
+
     next_returns = pd.read_csv("data/returns/{}.csv".format(stock_index))
     b_s_orders = pd.read_csv("data/predictions/{}_predictions.csv".format(stock_index))
 
@@ -43,22 +40,19 @@ def main(stock_index):
 
     b_s_orders = pd.merge(b_s_orders, actual_returns, how="left", on="monthID")
 
-    years = np.array(b_s_orders.monthID // 100).astype(int)
-    months = np.array(b_s_orders.monthID % 100).astype(int)
-    b_s_orders["Date"] = [dt.datetime(years[i], months[i], 1) for i in range(len(years))]
+    # Instead of multi-index using a "label" column.
     b_s_orders["Labels"] = b_s_orders["data_normalization"] + " " + b_s_orders["distance_model"] + " " + b_s_orders["stat_model"]
-
     mask = b_s_orders["Labels"] == b_s_orders["Labels"][0]
     baseline_cum_returns = convert_orders_to_cum_return(np.ones(len(b_s_orders[mask])), np.array(b_s_orders[mask]["Returns"]))
 
-    # perfect_cum_returns = convert_orders_to_cum_return(np.array(b_s_orders["Returns"] > 0),
-    #                                                    np.array(b_s_orders["Returns"]))
+    b_s_orders["Date"] = create_date_from_month_id(b_s_orders["monthID"])
 
     b_s_orders["cum_returns"] = 0
 
     for data_normalization in np.unique(b_s_orders.data_normalization):
         for distance_model in np.unique(b_s_orders.distance_model):
             for stat_model in np.unique(b_s_orders.stat_model):
+
                 mask = (b_s_orders["data_normalization"] == data_normalization) & \
                        (b_s_orders["distance_model"] == distance_model) & \
                        (b_s_orders["stat_model"] == stat_model)
@@ -66,36 +60,60 @@ def main(stock_index):
                 b_s_orders.loc[mask, "cum_returns"] = convert_orders_to_cum_return(b_s_orders[mask]["result"].values,
                                                                                    b_s_orders[mask]["Returns"].values)
 
+    month_id = np.unique(b_s_orders["monthID"])
+
+    if not os.path.exists('data/plots'):
+        os.makedirs('data/plots')
+
+    # Top 3
+
+    top_list = np.array(b_s_orders[b_s_orders["monthID"] == month_id[-1]].sort_values(by=["cum_returns"], ascending=False).head(3)["Labels"])
+
     plt.figure(figsize=(12, 12))
     for spec_label in np.unique(b_s_orders["Labels"]):
         mask = b_s_orders["Labels"] == spec_label
-        plt.plot(b_s_orders.Date[mask], b_s_orders.cum_returns[mask], label=spec_label)
+        if spec_label in top_list:
+            plt.plot(b_s_orders.Date[mask], b_s_orders.cum_returns[mask], label=spec_label, linewidth=4)
+        else:
+            plt.plot(b_s_orders.Date[mask], b_s_orders.cum_returns[mask], label=spec_label, alpha=0.3, linestyle='--', linewidth=1)
 
-    plt.plot(b_s_orders.Date[mask], baseline_cum_returns, label="baseline",
-             linewidth=4.0, linestyle="--", color="r")
+    plt.plot(b_s_orders.Date[mask], baseline_cum_returns, label="Baseline",
+             linewidth=5, linestyle="-", color="r")
 
     plt.legend()
     plt.title("Cumulative returns of {} 2011-2020".format(stock_index))
     plt.ylabel("Cumulative returns (%)")
-    plt.savefig('data/cumulative_returns_{}.png'.format(stock_index))
+    plt.savefig('data/plots/cumulative_returns_{}.png'.format(stock_index))
 
-    # accuracy = b_s_orders.copy()
-    # accuracy.index = accuracy.monthID
-    # perfect= accuracy["sp500"] > 0
-    # accuracy["baseline"] = 1
-    # date = accuracy["Date"]
-    # accuracy.drop(["monthID", "Date", "sp500"], axis=1, inplace=True)  # <-- get rid of sp500
-    #
-    # test = pd.DataFrame(np.sum(accuracy.isin(perfect))/len(accuracy))
-    # test.columns = ["accuracy"]
-    # test["distance_metric"] = ["dtw", "twed"]*6 + ["baseline"]
-    # test["stat_model"] = ["knn", "knn", "kstar", "kstar"]*3 + ["baseline"]
-    # test["normalization_method"] = ["none"]*4 + ["diff"]*4 + ["indexing"]*4 + ["baseline"]
-    # print(test.pivot_table(index=["distance_metric", "stat_model", "normalization_method"], aggfunc="mean").to_markdown())
+    if not os.path.exists('data/summary_tables'):
+        os.makedirs('data/summary_tables')
 
+    accuracy_table = pd.DataFrame(columns=["stock_index", "data_normalization", "distance_model", "stat_model", "accuracy", "f1", "profitability"])
+
+    for spec_label in np.unique(b_s_orders["Labels"]):
+
+        mask = b_s_orders["Labels"] == spec_label
+
+        perfect = np.array(b_s_orders[mask]["Returns"]) > 0
+        predictions = np.array(b_s_orders[mask]["result"]) > 0
+        profitability = np.array(b_s_orders[mask]["cum_returns"])[-1]
+
+        temp_dict = {
+            'stock_index': stock_index,
+            'data_normalization': b_s_orders[mask]["data_normalization"].values[-1],
+            'distance_model': b_s_orders[mask]["distance_model"].values[-1],
+            'stat_model': b_s_orders[mask]["stat_model"].values[-1],
+            'accuracy': accuracy_score(perfect, predictions),
+            'f1': f1_score(perfect, predictions),
+            'profitability': profitability
+        }
+
+        accuracy_table = accuracy_table.append(temp_dict, ignore_index=True)
+        accuracy_table.to_csv("data/summary_tables/{}".format(stock_index))
+
+
+yahoo_indexes = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225"]
 
 if __name__ == '__main__':
-    yahoo_indexes = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225"]
-
     for yahoo_index in yahoo_indexes:
         main(yahoo_index)

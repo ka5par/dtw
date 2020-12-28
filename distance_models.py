@@ -29,25 +29,23 @@ def dtw(s, t, window=15):
 # Time warp edit distance
 # https://en.wikipedia.org/wiki/Time_Warp_Edit_Distance
 @jit(forceobj=True)
-def twed(a, b, nu=1, _lambda=0.001, time_sa=None, time_sb=None, window=15):
+def twed(s, t, nu=1, _lambda=0.001, time_sa=None, time_sb=None, window=15):
 
     if time_sa is None:
-        time_sa = np.arange(len(a))
+        time_sa = np.arange(len(s))
 
     if time_sb is None:
-        time_sb = np.arange(len(b))
+        time_sb = np.arange(len(t))
 
     # Add padding
-    a = np.array([0] + list(a))
+    s = np.array([0] + list(s))
     time_sa = np.array([0] + list(time_sa))
-    b = np.array([0] + list(b))
+    t = np.array([0] + list(t))
     time_sb = np.array([0] + list(time_sb))
 
-    n, m = len(a), len(b)
+    n, m = len(s), len(t)
 
-    w = np.max([window, abs(n - m)])
-
-    # Dynamical programming
+    # Dynamic programming
     dp = np.zeros((n, m))
 
     # Initialize DP Matrix and set first row and column to infinity
@@ -64,7 +62,7 @@ def twed(a, b, nu=1, _lambda=0.001, time_sa=None, time_sb=None, window=15):
             # Deletion in A
             c[0] = (
                     dp[i - 1, j]
-                    + dlp(a[i - 1], a[i])
+                    + dlp(s[i - 1], s[i])
                     + nu * (time_sa[i] - time_sa[i - 1])
                     + _lambda
             )
@@ -72,7 +70,7 @@ def twed(a, b, nu=1, _lambda=0.001, time_sa=None, time_sb=None, window=15):
             # Deletion in B
             c[1] = (
                     dp[i, j - 1]
-                    + dlp(b[j - 1], b[j])
+                    + dlp(t[j - 1], t[j])
                     + nu * (time_sb[j] - time_sb[j - 1])
                     + _lambda
             )
@@ -80,8 +78,8 @@ def twed(a, b, nu=1, _lambda=0.001, time_sa=None, time_sb=None, window=15):
             # Keep data points in both time series
             c[2] = (
                     dp[i - 1, j - 1]
-                    + dlp(a[i], b[j])
-                    + dlp(a[i - 1], b[j - 1])
+                    + dlp(s[i], t[j])
+                    + dlp(s[i - 1], t[j - 1])
                     + nu * (abs(time_sa[i] - time_sb[j]) + abs(time_sa[i - 1] - time_sb[j - 1]))
             )
 
@@ -97,3 +95,19 @@ def twed(a, b, nu=1, _lambda=0.001, time_sa=None, time_sb=None, window=15):
 def dlp(a, b, p=2):
     cost = np.sum(np.power(np.abs(a - b), p))
     return np.power(cost, 1 / p)
+
+
+# Longest Common Subsequence for time-series
+# https://github.com/ymtoo/ts-dist/blob/master/ts_dist.py
+@jit(nopython=True)
+def lcss(s, t, delta, epsilon):
+    n, m = len(s), len(t)
+    dp = np.zeros([n+1, m+1])
+
+    for i in range(1, n+1):
+        for j in range(1, m+1):
+            if np.all(np.abs(s[i-1]-t[j-1])<epsilon) and (np.abs(i-j) < delta):
+                dp[i, j] = dp[i-1, j-1] + 1
+            else:
+                dp[i, j] = max(dp[i, j-1], dp[i-1, j])
+    return 1-dp[n, m]/min(n, m)
