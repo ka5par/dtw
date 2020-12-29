@@ -23,7 +23,6 @@ def read_data(prices_file, returns_file):
 
     stocks = pd.read_csv(prices_file, index_col=0)
     stocks["monthID"] = pd.to_datetime(stocks.index.values).year * 100 + pd.to_datetime(stocks.index.values).month
-
     returns = pd.read_csv(returns_file, index_col=0)
 
     return stocks, returns
@@ -61,8 +60,9 @@ def indexing(df_stocks, tv_split=60):
     return df_index, train_ids, test_ids
 
 
+# //TODO make this more efficient, clean.
 def calculate_distances(train_x, train_y, test_x, train_labels, predict_id):
-    distances_f = np.zeros([len(train_labels), 4])
+    distances_f = np.zeros([len(train_labels), 5])
 
     for count, unique_id in enumerate(train_labels):
 
@@ -71,10 +71,12 @@ def calculate_distances(train_x, train_y, test_x, train_labels, predict_id):
                                                     test_x[test_x["monthID"] == predict_id]["Close"])
         distances_f[count, 2] = distance_models.twed(train_x[train_x["monthID"] == unique_id]["Close"],
                                                      test_x[test_x["monthID"] == predict_id]["Close"])
-        distances_f[count, 3] = train_y[list(train_y.index) == unique_id]["Returns"]
+        distances_f[count, 3] = distance_models.lcss(np.array(train_x[train_x["monthID"] == unique_id]["Close"], dtype=np.float),
+                                                     np.array(test_x[test_x["monthID"] == predict_id]["Close"], dtype=np.float), np.inf, 0.25)
+        distances_f[count, 4] = train_y[list(train_y.index) == unique_id]["Returns"]
 
     output = pd.DataFrame(distances_f)
-    output.columns = ["monthID", "distance_dtw", "distance_twed", "returns"]
+    output.columns = ["monthID", "distance_dtw", "distance_twed", "distance_lcss", "returns"]
 
     return output
 
@@ -91,12 +93,15 @@ def predict_trades(type_train, train_x, train_y, test_x, train_labels, test_labe
                                         train_labels,
                                         predict_id
                                         )
-
+        # //TODO #7 tidy up below. -> make it more flexible.
         output.loc[len(output)] = [predict_id, instrument, type_train, "dtw", "knn",
                                    stat_models.knn(distances, "distance_dtw")]
 
         output.loc[len(output)] = [predict_id, instrument, type_train, "twed", "knn",
                                    stat_models.knn(distances, "distance_twed")]
+
+        output.loc[len(output)] = [predict_id, instrument, type_train, "lcss", "knn",
+                                   stat_models.knn(distances, "distance_lcss")]
 
         output.loc[len(output)] = [predict_id, instrument, type_train, "dtw", "kstar",
                                    stat_models.kstar(distances, "distance_dtw")]
@@ -104,9 +109,13 @@ def predict_trades(type_train, train_x, train_y, test_x, train_labels, test_labe
         output.loc[len(output)] = [predict_id, instrument, type_train, "twed", "kstar",
                                    stat_models.kstar(distances, "distance_twed")]
 
+        output.loc[len(output)] = [predict_id, instrument, type_train, "lcss", "kstar",
+                                   stat_models.kstar(distances, "distance_lcss")]
+
     return output
 
 
+# //TODO below out of this file, clean up below. Summarize code.
 def main(stock_index):
     print(stock_index)
 
@@ -169,5 +178,7 @@ yahoo_indexes = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225"]
 
 if __name__ == '__main__':
 
-    for stock_index in yahoo_indexes:
-        Parallel(n_jobs=len(yahoo_indexes))(delayed(main)(stock_index) for stock_index in yahoo_indexes)
+    # //TODO also add parallel to distance calculations.
+    # //TODO fix TQDM with parallel pools.
+
+    Parallel(n_jobs=len(yahoo_indexes))(delayed(main)(stock_index) for stock_index in yahoo_indexes)

@@ -2,6 +2,10 @@ from numba import jit
 import numpy as np
 
 
+# //TODO find more optimal nu, lambda (twed)
+# //TODO investigate lcss.
+# //TODO find more optimal delta, epsilon (lcss)
+# //TODO make nopython JIT work. (Problems caused by multiprocessing)
 # Dynamic Time Warp
 # https://github.com/MJeremy2017/machine-learning-models/blob/master/Dynamic-Time-Warping/dynamic-time-warping.py
 @jit(forceobj=True)
@@ -29,7 +33,7 @@ def dtw(s, t, window=15):
 # Time warp edit distance
 # https://en.wikipedia.org/wiki/Time_Warp_Edit_Distance
 @jit(forceobj=True)
-def twed(s, t, nu=1, _lambda=0.001, time_sa=None, time_sb=None, window=15):
+def twed(s, t, nu=1, _lambda=0.001, time_sa=None, time_sb=None):
 
     if time_sa is None:
         time_sa = np.arange(len(s))
@@ -99,7 +103,7 @@ def dlp(a, b, p=2):
 
 # Longest Common Subsequence for time-series
 # https://github.com/ymtoo/ts-dist/blob/master/ts_dist.py
-@jit(nopython=True)
+@jit(forceobj=True)
 def lcss(s, t, delta, epsilon):
     n, m = len(s), len(t)
     dp = np.zeros([n+1, m+1])

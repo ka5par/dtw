@@ -5,7 +5,6 @@ from numba import jit
 
 # //TODO #5 fix k*nn, something up with it.
 
-
 @jit(forceobj=True)
 def knn(distances, column):
     predictions = np.zeros(10)

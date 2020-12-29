@@ -11,7 +11,6 @@ import os
 # import tabulate #  If need to pretty pring markdown.
 
 # //TODO #6 cmd line arguments,
-# //TODO create accuracy csvs.
 
 
 def convert_orders_to_cum_return(orders, underlying_returns):
@@ -47,6 +46,7 @@ def main(stock_index):
 
     b_s_orders["Date"] = create_date_from_month_id(b_s_orders["monthID"])
 
+    # Calculate the cumulative returns of all the outputs.
     b_s_orders["cum_returns"] = 0
 
     for data_normalization in np.unique(b_s_orders.data_normalization):
@@ -62,32 +62,32 @@ def main(stock_index):
 
     month_id = np.unique(b_s_orders["monthID"])
 
+    # Plot the cumulative returns
     if not os.path.exists('data/plots'):
         os.makedirs('data/plots')
 
-    # Top 3
-
-    top_list = np.array(b_s_orders[b_s_orders["monthID"] == month_id[-1]].sort_values(by=["cum_returns"], ascending=False).head(3)["Labels"])
+    # Top 5
+    top_list = np.array(b_s_orders[b_s_orders["monthID"] == month_id[-1]].sort_values(by=["cum_returns"], ascending=False).head(5)["Labels"])
 
     plt.figure(figsize=(12, 12))
     for spec_label in np.unique(b_s_orders["Labels"]):
         mask = b_s_orders["Labels"] == spec_label
         if spec_label in top_list:
-            plt.plot(b_s_orders.Date[mask], b_s_orders.cum_returns[mask], label=spec_label, linewidth=4)
+            plt.plot(b_s_orders.Date[mask], b_s_orders.cum_returns[mask], label=spec_label, linewidth=2)
         else:
             plt.plot(b_s_orders.Date[mask], b_s_orders.cum_returns[mask], label=spec_label, alpha=0.3, linestyle='--', linewidth=1)
 
-    plt.plot(b_s_orders.Date[mask], baseline_cum_returns, label="Baseline",
-             linewidth=5, linestyle="-", color="r")
+    plt.plot(b_s_orders.Date[mask], baseline_cum_returns, label="Baseline", alpha=0.5, linestyle="-", linewidth=3, color="r")
 
     plt.legend()
-    plt.title("Cumulative returns of {} 2011-2020".format(stock_index))
+    plt.title("Cumulative returns of {} 2011-2020".format(dict_indexes[stock_index]))
     plt.ylabel("Cumulative returns (%)")
     plt.savefig('data/plots/cumulative_returns_{}.png'.format(stock_index))
 
     if not os.path.exists('data/summary_tables'):
         os.makedirs('data/summary_tables')
 
+    # Create the performance metrics for the model outputs.
     accuracy_table = pd.DataFrame(columns=["stock_index", "data_normalization", "distance_model", "stat_model", "accuracy", "f1", "profitability"])
 
     for spec_label in np.unique(b_s_orders["Labels"]):
@@ -99,7 +99,7 @@ def main(stock_index):
         profitability = np.array(b_s_orders[mask]["cum_returns"])[-1]
 
         temp_dict = {
-            'stock_index': stock_index,
+            'stock_index': dict_indexes[stock_index],
             'data_normalization': b_s_orders[mask]["data_normalization"].values[-1],
             'distance_model': b_s_orders[mask]["distance_model"].values[-1],
             'stat_model': b_s_orders[mask]["stat_model"].values[-1],
@@ -113,6 +113,7 @@ def main(stock_index):
 
 
 yahoo_indexes = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225"]
+dict_indexes = {"^GSPC": "S&P 500", "^DJI": "Dow Jones Industrial Average", "^GDAXI": "DAX30", "^FCHI": "CAC 40", "^N225": "Nikkei 225"}
 
 if __name__ == '__main__':
     for yahoo_index in yahoo_indexes:

@@ -19,8 +19,6 @@ import os
 
 from tqdm import trange
 
-# //TODO fix investing, broken currently (Commodities/implied vols and relatively new data useful from there)
-
 
 def get_data_from_yahoo(tickers, years=15, force_overwrite=True):
 
