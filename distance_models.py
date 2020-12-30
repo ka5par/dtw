@@ -5,7 +5,6 @@ import numpy as np
 # //TODO find more optimal nu, lambda (twed)
 # //TODO investigate lcss.
 # //TODO find more optimal delta, epsilon (lcss)
-# //TODO make nopython JIT work. (Problems caused by multiprocessing)
 # Dynamic Time Warp
 # https://github.com/MJeremy2017/machine-learning-models/blob/master/Dynamic-Time-Warping/dynamic-time-warping.py
 @jit(forceobj=True)
@@ -105,13 +104,26 @@ def dlp(a, b, p=2):
 # https://github.com/ymtoo/ts-dist/blob/master/ts_dist.py
 @jit(forceobj=True)
 def lcss(s, t, delta, epsilon):
-    n, m = len(s), len(t)
+
+    s, t = check_arrays(s, t)
+    n, m = s.shape[1], t.shape[1]
     dp = np.zeros([n+1, m+1])
 
     for i in range(1, n+1):
         for j in range(1, m+1):
-            if np.all(np.abs(s[i-1]-t[j-1])<epsilon) and (np.abs(i-j) < delta):
+            if np.all(np.abs(s[:, i-1]-t[:, j-1]) < epsilon) and (np.abs(i-j) < delta):
                 dp[i, j] = dp[i-1, j-1] + 1
             else:
                 dp[i, j] = max(dp[i, j-1], dp[i-1, j])
+
     return 1-dp[n, m]/min(n, m)
+
+
+def check_arrays(s, t):
+    s = np.array(s, dtype=np.float)
+    t = np.array(t, dtype=np.float)
+    if s.ndim == 1:
+        s = np.reshape(s, (1, s.size))
+    if t.ndim == 1:
+        t = np.reshape(t, (1, t.size))
+    return s, t
