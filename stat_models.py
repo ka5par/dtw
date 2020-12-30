@@ -3,7 +3,7 @@ from sklearn.neighbors import KNeighborsRegressor
 from numba import jit
 
 
-# //TODO #5 fix k*nn, something up with it.
+# //TODO K* see why -1 doesn't work.
 
 @jit(forceobj=True)
 def knn(distances, column):
@@ -32,7 +32,7 @@ def kstar(distances, column):
 
         n = len(distances)
 
-        beta = lc * distances.distance_dtw
+        beta = lc * distances[column]
         l_lambda = beta[1] + 1  # Otherwise it will never go into the while loop - go figure research papers...
         k, sum_beta, sum_beta_square = 0, 0, 0
         np.seterr(invalid='ignore')  # High change sqrt has negative value in it.
@@ -40,10 +40,13 @@ def kstar(distances, column):
             k += 1
             sum_beta = sum_beta + beta[k]
             sum_beta_square = sum_beta_square + (beta[k]) ** 2
-            l_lambda = (1 / k) * (sum_beta * np.sqrt(k + sum_beta ** 2 - k * sum_beta_square))
+            l_lambda = (1 / k) * (sum_beta + np.sqrt(k + sum_beta ** 2 - k * sum_beta_square))
+
         alpha = np.zeros(n)
+
         for i in range(n):
-            alpha[i] = max(l_lambda - lc * distances[column][i], 0)
+            alpha[i] = np.max(l_lambda - lc * distances[column][i], 0)
+            alpha[i] = alpha[i] / np.sum(alpha[i])
 
         predictions[count] = np.sum(alpha * distances.returns)
 
