@@ -6,7 +6,6 @@ import distance_models
 
 from tqdm import tqdm
 from functools import reduce
-import multiprocessing
 from joblib import Parallel, delayed
 
 # Step 1 separate each month of each stock.
@@ -14,9 +13,7 @@ from joblib import Parallel, delayed
 # Choose n closest months, predict next month's return using KNN given distance and return.
 # If next month's return is positive, buy one stock. Otherwise sell one unit.
 # Calculate real return.
-# Proceed to next month and repeat 12 times.
-
-# //TODO #4 cmd line arguments for code.
+# Proceed to next month and repeat x times.
 
 
 def read_data(prices_file, returns_file):
@@ -60,7 +57,7 @@ def indexing(df_stocks, tv_split=60):
     return df_index, train_ids, test_ids
 
 
-# //TODO make this more efficient, clean.
+# //TODO Tidy up
 def calculate_distances(train_x, train_y, test_x, train_labels, predict_id):
     distances_f = np.zeros([len(train_labels), 5])
 
@@ -72,7 +69,7 @@ def calculate_distances(train_x, train_y, test_x, train_labels, predict_id):
         distances_f[count, 2] = distance_models.twed(train_x[train_x["monthID"] == unique_id]["Close"],
                                                      test_x[test_x["monthID"] == predict_id]["Close"])
         distances_f[count, 3] = distance_models.lcss(np.array(train_x[train_x["monthID"] == unique_id]["Close"], dtype=np.float),
-                                                     np.array(test_x[test_x["monthID"] == predict_id]["Close"], dtype=np.float), np.inf, 0.25)
+                                                     np.array(test_x[test_x["monthID"] == predict_id]["Close"], dtype=np.float), np.inf, 0.5)
         distances_f[count, 4] = train_y[list(train_y.index) == unique_id]["Returns"]
 
     output = pd.DataFrame(distances_f)
@@ -81,6 +78,7 @@ def calculate_distances(train_x, train_y, test_x, train_labels, predict_id):
     return output
 
 
+# //TODO Tidy up
 def predict_trades(type_train, train_x, train_y, test_x, train_labels, test_labels, instrument):
 
     output = pd.DataFrame(columns=list(["monthID", "instrument", "data_normalization", "distance_model", "stat_model", "result"]))
@@ -93,7 +91,7 @@ def predict_trades(type_train, train_x, train_y, test_x, train_labels, test_labe
                                         train_labels,
                                         predict_id
                                         )
-        # //TODO #7 tidy up below. -> make it more flexible.
+
         output.loc[len(output)] = [predict_id, instrument, type_train, "dtw", "knn",
                                    stat_models.knn(distances, "distance_dtw")]
 
@@ -115,7 +113,7 @@ def predict_trades(type_train, train_x, train_y, test_x, train_labels, test_labe
     return output
 
 
-# //TODO below out of this file, clean up below. Summarize code.
+# //TODO Tidy up
 def main(stock_index):
     print(stock_index)
 
