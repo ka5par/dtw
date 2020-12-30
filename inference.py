@@ -68,12 +68,12 @@ def main(stock_index):
 
     # Top 5
     top_list = np.array(b_s_orders[b_s_orders["monthID"] == month_id[-1]].sort_values(by=["cum_returns"], ascending=False).head(5)["Labels"])
-
     plt.figure(figsize=(12, 12))
     for spec_label in np.unique(b_s_orders["Labels"]):
         mask = b_s_orders["Labels"] == spec_label
         if spec_label in top_list:
             plt.plot(b_s_orders.Date[mask], b_s_orders.cum_returns[mask], label=spec_label, linewidth=2)
+            plt.annotate(spec_label, xy=(plt.xticks()[0][-1] + 0.7, b_s_orders.cum_returns[mask].iloc[-1]))
         else:
             plt.plot(b_s_orders.Date[mask], b_s_orders.cum_returns[mask], label=spec_label, alpha=0.3, linestyle='--', linewidth=1)
 
