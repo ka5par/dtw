@@ -4,7 +4,7 @@ import os
 import stat_models
 import distance_models
 
-from tqdm import tqdm
+from tqdm import trange
 from functools import reduce
 from joblib import Parallel, delayed
 
@@ -62,7 +62,6 @@ def calculate_distances(train_x, train_y, test_x, train_labels, predict_id):
     distances_f = np.zeros([len(train_labels), 5])
 
     for count, unique_id in enumerate(train_labels):
-
         distances_f[count, 0] = unique_id
         distances_f[count, 1] = distance_models.dtw(train_x[train_x["monthID"] == unique_id]["Close"],
                                                     test_x[test_x["monthID"] == predict_id]["Close"])
@@ -73,105 +72,85 @@ def calculate_distances(train_x, train_y, test_x, train_labels, predict_id):
         distances_f[count, 4] = train_y[list(train_y.index) == unique_id]["Returns"]
 
     output = pd.DataFrame(distances_f)
-    output.columns = ["monthID", "distance_dtw", "distance_twed", "distance_lcss", "returns"]
+    output.columns = ["monthID", "dtw", "twed", "lcss", "returns"]
 
     return output
 
 
-# //TODO Tidy up
-def predict_trades(type_train, train_x, train_y, test_x, train_labels, test_labels, instrument):
+def multiproc_predict_trades(predict_id, train_labels, test_labels, stocks, returns, type_train, instrument):
+
+    train_x = stocks[stocks["monthID"].isin(train_labels)]
+    train_y = returns[returns.index.isin(train_labels)]
+    test_x = stocks[stocks["monthID"].isin(test_labels)]
+
+    distances = calculate_distances(train_x, train_y, test_x, train_labels, predict_id)
 
     output = pd.DataFrame(columns=list(["monthID", "instrument", "data_normalization", "distance_model", "stat_model", "result"]))
+    string_distance_models = ["dtw", "twed", "lcss"]
+    string_stat_models = ["knn", "kstar"]
 
-    for count, predict_id in enumerate(tqdm(test_labels)):
-
-        distances = calculate_distances(train_x,
-                                        train_y,
-                                        test_x,
-                                        train_labels,
-                                        predict_id
-                                        )
-
-        output.loc[len(output)] = [predict_id, instrument, type_train, "dtw", "knn",
-                                   stat_models.knn(distances, "distance_dtw")]
-
-        output.loc[len(output)] = [predict_id, instrument, type_train, "twed", "knn",
-                                   stat_models.knn(distances, "distance_twed")]
-
-        output.loc[len(output)] = [predict_id, instrument, type_train, "lcss", "knn",
-                                   stat_models.knn(distances, "distance_lcss")]
-
-        output.loc[len(output)] = [predict_id, instrument, type_train, "dtw", "kstar",
-                                   stat_models.kstar(distances, "distance_dtw")]
-
-        output.loc[len(output)] = [predict_id, instrument, type_train, "twed", "kstar",
-                                   stat_models.kstar(distances, "distance_twed")]
-
-        output.loc[len(output)] = [predict_id, instrument, type_train, "lcss", "kstar",
-                                   stat_models.kstar(distances, "distance_lcss")]
+    for i in range(len(string_distance_models)):
+        for j in range(len(string_stat_models)):
+            if j == 0:
+                output.loc[len(output)] = [predict_id, instrument, type_train, string_distance_models[i], string_stat_models[j],
+                                           stat_models.knn(distances, string_distance_models[i])]
+            else:
+                output.loc[len(output)] = [predict_id, instrument, type_train, string_distance_models[i], string_stat_models[j],
+                                           stat_models.kstar(distances, string_distance_models[i])]
 
     return output
 
 
-# //TODO Tidy up
-def main(stock_index):
-    print(stock_index)
+def predict_trades(type_train, stocks, returns, instrument, months_out_of_sample=60):
+
+    if type_train == "None":
+        train_labels = np.unique(stocks["monthID"])[:-months_out_of_sample]
+        test_labels = np.unique(stocks["monthID"])[-months_out_of_sample:-1]
+    elif type_train == "Difference":
+        stocks, train_labels, test_labels = difference(stocks, tv_split=months_out_of_sample)
+    elif type_train == "Index":
+        stocks, train_labels, test_labels = indexing(stocks, tv_split=months_out_of_sample)
+    else:
+        raise TypeError("No/Wrong type_train chosen.")
+
+    labels = np.append(train_labels, test_labels)
+
+    output = pd.concat(Parallel(n_jobs=-1)(
+        delayed(multiproc_predict_trades)
+        (
+            test_labels[i],
+            labels[:(-months_out_of_sample + i + 1)],
+            labels[-(months_out_of_sample + 1 + i):],
+            stocks,
+            returns,
+            type_train,
+            instrument
+        ) for i in trange(len(test_labels), desc="".join([instrument, " ", type_train]))))
+
+    return output
+
+
+def main(instrument):
 
     months_out_of_sample = 120
-    stock_df = "data/stock_dfs/{}.csv".format(stock_index)
-    next_month_returns_df = "data/returns/{}.csv".format(stock_index)
+    instrument_file = "data/stock_dfs/{}.csv".format(instrument)
+    next_month_returns_file = "data/returns/{}.csv".format(instrument)
+
+    stocks_f, returns_f = read_data(instrument_file, next_month_returns_file)
+
+    trade_predictions = [predict_trades(normalization_type, stocks_f, returns_f, instrument, months_out_of_sample) for normalization_type in normalization_types]
 
     if not os.path.exists('data/predictions'):
         os.makedirs('data/predictions')
 
-    out_filename = "data/predictions/{}_predictions.csv".format(stock_index)
+    out_filename = "data/predictions/{}_predictions.csv".format(instrument)
 
-    stocks_f, returns_f = read_data(stock_df, next_month_returns_df)
-    train_ids = np.unique(stocks_f.monthID)[:-months_out_of_sample]
-    test_ids = np.unique(stocks_f.monthID)[-months_out_of_sample:-1]
-
-    diff_stocks, diff_train_ids, diff_test_ids = difference(stocks_f, tv_split=months_out_of_sample)
-    index_stocks, index_train_ids, index_test_ids = indexing(stocks_f, tv_split=months_out_of_sample)
-
-    print("No data normalization")
-    trade_predictions_dtw = predict_trades("None",
-                                           stocks_f[stocks_f["monthID"].isin(train_ids)],
-                                           returns_f[returns_f.index.isin(train_ids)],
-                                           stocks_f[stocks_f["monthID"].isin(test_ids)],
-                                           train_ids,
-                                           test_ids,
-                                           stock_index
-                                           )
-
-    print("Difference")
-    trade_predictions_ddtw = predict_trades("Difference",
-                                            diff_stocks[diff_stocks["monthID"].isin(diff_train_ids)],
-                                            returns_f[returns_f.index.isin(diff_train_ids)],
-                                            diff_stocks[diff_stocks["monthID"].isin(diff_test_ids)],
-                                            diff_train_ids,
-                                            diff_test_ids,
-                                            stock_index
-                                            )
-
-    print("Index")
-    trade_predictions_idtw = predict_trades("Index",
-                                            index_stocks[index_stocks["monthID"].isin(index_train_ids)],
-                                            returns_f[returns_f.index.isin(index_train_ids)],
-                                            index_stocks[index_stocks["monthID"].isin(index_test_ids)],
-                                            index_train_ids,
-                                            index_test_ids,
-                                            stock_index
-                                            )
-
-    data_frames = [trade_predictions_dtw,
-                   trade_predictions_ddtw,
-                   trade_predictions_idtw]
-
-    df_merged = reduce(lambda left, right: pd.merge(left, right, how='outer'), data_frames)
+    df_merged = reduce(lambda left, right: pd.merge(left, right, how='outer'), trade_predictions)
     pd.DataFrame.to_csv(df_merged, out_filename, sep=',', na_rep='.', index=False)
 
 
 yahoo_indexes = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225"]
+normalization_types = ["None", "Difference", "Index"]
 
 
 if __name__ == '__main__':
@@ -179,4 +158,6 @@ if __name__ == '__main__':
     # //TODO also add parallel to distance calculations.
     # //TODO fix TQDM with parallel pools.
 
-    Parallel(n_jobs=len(yahoo_indexes))(delayed(main)(stock_index) for stock_index in yahoo_indexes)
+    # Parallel(n_jobs=len(yahoo_indexes))(delayed(main)(stock_index) for stock_index in yahoo_indexes)
+    for stock_index in yahoo_indexes:
+        main(stock_index)
