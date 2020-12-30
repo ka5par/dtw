@@ -8,7 +8,7 @@ import pandas as pd
 import os
 
 
-# import tabulate #  If need to pretty pring markdown.
+# import tabulate #  If need to pretty print markdown.
 
 # //TODO #6 cmd line arguments,
 
@@ -80,7 +80,7 @@ def main(stock_index):
     plt.plot(b_s_orders.Date[mask], baseline_cum_returns, label="Baseline", alpha=0.5, linestyle="-", linewidth=3, color="r")
 
     plt.legend()
-    plt.title("Cumulative returns of {} 2011-2020".format(dict_indexes[stock_index]))
+    plt.title("Cumulative returns of {}".format(dict_indexes[stock_index]))
     plt.ylabel("Cumulative returns (%)")
     plt.savefig('data/plots/cumulative_returns_{}.png'.format(stock_index))
 
