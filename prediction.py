@@ -155,9 +155,5 @@ normalization_types = ["None", "Difference", "Index"]
 
 if __name__ == '__main__':
 
-    # //TODO also add parallel to distance calculations.
-    # //TODO fix TQDM with parallel pools.
-
-    # Parallel(n_jobs=len(yahoo_indexes))(delayed(main)(stock_index) for stock_index in yahoo_indexes)
     for stock_index in yahoo_indexes:
         main(stock_index)

@@ -8,11 +8,6 @@ import pandas as pd
 import os
 
 
-# import tabulate #  If need to pretty print markdown.
-
-# //TODO #6 cmd line arguments,
-
-
 def convert_orders_to_cum_return(orders, underlying_returns):
     cum_returns = underlying_returns + 1
     cum_returns[0] = 1 + underlying_returns[0]
