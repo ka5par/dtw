@@ -42,7 +42,7 @@ def indexing(df_stocks, tv_split=60):
     df_index.index = pd.to_datetime(df_index.index)
     last_month_closes = df_index.loc[df_index.groupby(df_index.index.to_period('M')).apply(lambda x: x.index.max())]
 
-    ids = last_month_closes.monthID
+    ids = last_month_closes["monthID"]
     last_month_closes = last_month_closes["Close"].shift(1)
 
     for i in range(len(ids)):
@@ -57,18 +57,36 @@ def indexing(df_stocks, tv_split=60):
     return df_index, train_ids, test_ids
 
 
+# https://stats.stackexchange.com/questions/178626/how-to-normalize-data-between-1-and-1
+def normalizing(df_stocks, tv_split):
+    df_norm = df_stocks.copy()
+
+    ids = np.unique(df_stocks["monthID"])
+
+    for i in range(len(ids)):
+        mask = df_norm["monthID"] == ids[i]
+        x = df_norm.loc[mask, "Close"]
+        df_norm.loc[mask, "Close"] = 2 * ((x - np.min(x)) / (np.max(x)-np.min(x))) - 1
+
+    df_norm = df_norm.dropna()
+
+    train_ids = np.unique(df_norm.monthID)[:-tv_split]
+    test_ids = np.unique(df_norm.monthID)[-tv_split:-1]
+
+    return df_norm, train_ids, test_ids
+
+
 # //TODO Tidy up
 def calculate_distances(train_x, train_y, test_x, train_labels, predict_id):
     distances_f = np.zeros([len(train_labels), 5])
 
     for count, unique_id in enumerate(train_labels):
+        train = train_x[train_x["monthID"] == unique_id]["Close"]
+        test = test_x[test_x["monthID"] == predict_id]["Close"]
         distances_f[count, 0] = unique_id
-        distances_f[count, 1] = distance_models.dtw(train_x[train_x["monthID"] == unique_id]["Close"],
-                                                    test_x[test_x["monthID"] == predict_id]["Close"])
-        distances_f[count, 2] = distance_models.twed(train_x[train_x["monthID"] == unique_id]["Close"],
-                                                     test_x[test_x["monthID"] == predict_id]["Close"])
-        distances_f[count, 3] = distance_models.lcss(np.array(train_x[train_x["monthID"] == unique_id]["Close"], dtype=np.float),
-                                                     np.array(test_x[test_x["monthID"] == predict_id]["Close"], dtype=np.float), np.inf, 0.5)
+        distances_f[count, 1] = distance_models.dtw(train, test)
+        distances_f[count, 2] = distance_models.twed(train, test, nu=1, _lambda=0.001,)
+        distances_f[count, 3] = distance_models.lcss(np.array(train, dtype=np.float), np.array(test, dtype=np.float), np.inf, 0.5)
         distances_f[count, 4] = train_y[list(train_y.index) == unique_id]["Returns"]
 
     output = pd.DataFrame(distances_f)
@@ -77,7 +95,7 @@ def calculate_distances(train_x, train_y, test_x, train_labels, predict_id):
     return output
 
 
-def multiproc_predict_trades(predict_id, train_labels, test_labels, stocks, returns, type_train, instrument):
+def multiproc_predict_trades(predict_id, train_labels, test_labels, stocks, returns, type_train, instrument, distance_models_to_run):
 
     train_x = stocks[stocks["monthID"].isin(train_labels)]
     train_y = returns[returns.index.isin(train_labels)]
@@ -101,7 +119,7 @@ def multiproc_predict_trades(predict_id, train_labels, test_labels, stocks, retu
     return output
 
 
-def predict_trades(type_train, stocks, returns, instrument, months_out_of_sample=60):
+def predict_trades(type_train, stocks, returns, instrument, distance_models_to_run, months_out_of_sample=60):
 
     if type_train == "None":
         train_labels = np.unique(stocks["monthID"])[:-months_out_of_sample]
@@ -110,6 +128,8 @@ def predict_trades(type_train, stocks, returns, instrument, months_out_of_sample
         stocks, train_labels, test_labels = difference(stocks, tv_split=months_out_of_sample)
     elif type_train == "Index":
         stocks, train_labels, test_labels = indexing(stocks, tv_split=months_out_of_sample)
+    elif type_train == "Normalization":
+        stocks, train_labels, test_labels = normalizing(stocks, tv_split=months_out_of_sample)
     else:
         raise TypeError("No/Wrong type_train chosen.")
 
@@ -124,13 +144,14 @@ def predict_trades(type_train, stocks, returns, instrument, months_out_of_sample
             stocks,
             returns,
             type_train,
-            instrument
+            instrument,
+            distance_models_to_run
         ) for i in trange(len(test_labels), desc="".join([instrument, " ", type_train]))))
 
     return output
 
 
-def main(instrument):
+def main(instrument, distance_models_to_run):
 
     months_out_of_sample = 120
     instrument_file = "data/stock_dfs/{}.csv".format(instrument)
@@ -138,7 +159,7 @@ def main(instrument):
 
     stocks_f, returns_f = read_data(instrument_file, next_month_returns_file)
 
-    trade_predictions = [predict_trades(normalization_type, stocks_f, returns_f, instrument, months_out_of_sample) for normalization_type in normalization_types]
+    trade_predictions = [predict_trades(normalization_type, stocks_f, returns_f, instrument, distance_models_to_run, months_out_of_sample=months_out_of_sample) for normalization_type in normalization_types]
 
     if not os.path.exists('data/predictions'):
         os.makedirs('data/predictions')
@@ -150,10 +171,10 @@ def main(instrument):
 
 
 yahoo_indexes = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225"]
-normalization_types = ["None", "Difference", "Index"]
-
+normalization_types = ["Index", "Normalization"]  # ["None", "Difference", "Index"]
+list_of_distance_models = ["DTW", "TWED", "LCSS"]
 
 if __name__ == '__main__':
 
     for stock_index in yahoo_indexes:
-        main(stock_index)
+        main(stock_index, list_of_distance_models)
