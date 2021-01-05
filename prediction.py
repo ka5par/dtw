@@ -80,9 +80,16 @@ def calculate_distances(train_x, train_y, test_x, train_labels, predict_id, sett
     distances_f = np.zeros([len(train_labels), 5])
 
     for count, unique_id in enumerate(train_labels):
+
         train = train_x[train_x["monthID"] == unique_id]["Close"]
         test = test_x[test_x["monthID"] == predict_id]["Close"]
         distances_f[count, 0] = unique_id
+
+        if settings_dict["lcss_delta"] == "variable":
+            settings_dict["lcss_delta"] = np.max([1, np.round(0.25 * np.mean([len(train), len(test)]), 0)])  # At least 1, 25% of the length of the average length of train&test.
+
+        if settings_dict["lcss_epsilon"] == "variable":
+            settings_dict["lcss_epsilon"] = np.min([np.std(train), np.std(test)])  # Smallest standard deviation of train/test
 
         if "dtw" in settings_dict["list_of_distance_models"]:
             distances_f[count, 1] = distance_models.dtw(train, test)
