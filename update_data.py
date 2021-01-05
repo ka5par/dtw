@@ -42,7 +42,7 @@ def get_data_from_yahoo(tickers, years=15, force_overwrite=True):
 
 def get_data_from_investing(tickers, countries, years=15, t_type="index"):
 
-    if t_type != "index":
+    if t_type != "index" and t_type != "commodity":
         print("Currently, only work with indexes from investing.com.")
         return
 
@@ -53,15 +53,31 @@ def get_data_from_investing(tickers, countries, years=15, t_type="index"):
     end = dt.datetime.now()
     print("Downloading from investing.com")
 
-    for i in trange(len(tickers)):
-        ticker = tickers[i]
-        if not os.path.exists('data/stock_dfs/{}.csv'.format(ticker)):
-            df = investpy.get_index_historical_data(index=ticker,
-                                                    from_date=str(start.strftime("%d/%m/%Y")),
-                                                    to_date=str(end.strftime("%d/%m/%Y")),
-                                                    country=countries[i])
+    if t_type == "index":
+        for i in trange(len(tickers)):
+            ticker = tickers[i]
+            if not os.path.exists('data/stock_dfs/{}.csv'.format(ticker)):
+                df = investpy.get_index_historical_data(index=ticker,
+                                                        from_date=str(start.strftime("%d/%m/%Y")),
+                                                        to_date=str(end.strftime("%d/%m/%Y")),
+                                                        country=countries[i])
+                df.reset_index(inplace=True)
+                df.set_index("Date", inplace=True)
+                df.drop(['High', 'Low', 'Open', 'Volume', 'Currency'], axis=1, inplace=True)
+                df.to_csv('data/stock_dfs/{}.csv'.format(ticker))
+
+    elif t_type == "commodity":
+
+        for i in trange(len(tickers)):
+
+            ticker = tickers[i]
+            df = investpy.get_commodity_historical_data(commodity=ticker,
+                                                            from_date=str(start.strftime("%d/%m/%Y")),
+                                                            to_date=str(end.strftime("%d/%m/%Y")),
+                                                            country=countries[i])
             df.reset_index(inplace=True)
             df.set_index("Date", inplace=True)
+            df.drop(['High', 'Low', 'Open', 'Volume', 'Currency'], axis=1, inplace=True)
             df.to_csv('data/stock_dfs/{}.csv'.format(ticker))
 
 
@@ -88,13 +104,24 @@ def calculate_returns(ticker):
     returns.to_csv('data/returns/{}.csv'.format(ticker))
 
 
+tickers_yahoo = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225", "^VIX"]
+
+tickers_investing = ["Brent Oil", "Natural Gas", "Gasoline RBOB", "Carbon Emissions", "Gold", "Copper", "London Wheat"]
+countries_investing = ["united kingdom", "united states", "united states", "united kingdom", "united states", "united states", "united kingdom"]
+
+
 if __name__ == '__main__':
-    tickers_yahoo = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225", "^VIX"]
-
-    # tickers_investing = ["S&P 500", "FTSE 100", "DAX", "CAC 40", "TOPIX"]
-    # countries_investing = ["United States", "United Kingdom", "Germany", "France", "Japan"]
-    # get_data_from_investing(tickers_investing, countries_investing, years=40)
-
+    get_data_from_investing(tickers_investing, countries_investing, years=40, t_type="commodity")
     get_data_from_yahoo(tickers_yahoo, years=40)
+
     for ticker_l in tickers_yahoo:
         calculate_returns(ticker_l)
+
+    for ticker_l in tickers_investing:
+        calculate_returns(ticker_l)
+
+    # print(investpy.commodities.get_commodity_groups())
+    # print(investpy.get_commodities_overview("energy"))
+    # print(investpy.get_commodities_overview("metals"))
+    # print(investpy.get_commodities_overview("grains"))
+    # print(investpy.get_commodities_overview("softs"))

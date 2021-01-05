@@ -2,9 +2,6 @@ from numba import jit
 import numpy as np
 
 
-# //TODO find more optimal nu, lambda (twed)
-# //TODO investigate lcss.
-# //TODO find more optimal delta, epsilon (lcss)
 # Dynamic Time Warp
 # https://github.com/MJeremy2017/machine-learning-models/blob/master/Dynamic-Time-Warping/dynamic-time-warping.py
 @jit(forceobj=True)

@@ -194,8 +194,9 @@ def main(settings_dict):
 
 
 yahoo_indexes = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225"]  # yahoo finance tickers
-normalization_types_c = ["Index", "Normalization"]  # ["None", "Difference", "Index", "Normalization"]
+normalization_types_c = ["Index"]  # ["None", "Difference", "Index", "Normalization"]
 list_of_distance_models_c = ["dtw", "twed", "lcss"]  # ["dtw", "twed", "lcss"]
+tickers_investing = ["Brent Oil", "Natural Gas", "Gasoline RBOB", "Carbon Emissions", "Gold", "Aluminum", "London Wheat"]
 
 # sample config
 config = {"twed_nu": 0.25,
@@ -209,6 +210,9 @@ config = {"twed_nu": 0.25,
           "instrument": "^GSPC"}
 
 if __name__ == '__main__':
-    for stock_index in yahoo_indexes:
-        config["instrument"] = stock_index
+    # for stock_index in yahoo_indexes:
+    #     config["instrument"] = stock_index
+    #     main(config)
+    for commodity in tickers_investing:
+        config["instrument"] = commodity
         main(config)
