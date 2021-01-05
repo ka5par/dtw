@@ -49,7 +49,7 @@ def kstar(distances, column):
 
         predictions[count] = np.sum(alpha * distances.returns)
 
-    if np.sum(predictions > 0) >= 4:
+    if np.sum(predictions > 0) >= 5:
         return 1
     else:
         return -1
