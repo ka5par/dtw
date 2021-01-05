@@ -12,7 +12,6 @@ def knn(distances, column):
         neigh = KNeighborsRegressor(n_neighbors=neighbours, weights='distance')
         neigh.fit(np.array(distances[column]).reshape(-1, 1), np.array(distances.returns))
         predictions[neighbours - 1] = neigh.predict([[np.mean(np.sort(np.array(distances[column]))[:neighbours])]])
-
     if np.sum(predictions > 0) >= 5:
         return 1
     else:

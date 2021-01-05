@@ -76,17 +76,33 @@ def normalizing(df_stocks, tv_split):
     return df_norm, train_ids, test_ids
 
 
-# //TODO Tidy up
-def calculate_distances(train_x, train_y, test_x, train_labels, predict_id):
+def calculate_distances(train_x, train_y, test_x, train_labels, predict_id, settings_dict):
     distances_f = np.zeros([len(train_labels), 5])
 
     for count, unique_id in enumerate(train_labels):
         train = train_x[train_x["monthID"] == unique_id]["Close"]
         test = test_x[test_x["monthID"] == predict_id]["Close"]
         distances_f[count, 0] = unique_id
-        distances_f[count, 1] = distance_models.dtw(train, test)
-        distances_f[count, 2] = distance_models.twed(train, test, nu=1, _lambda=0.001,)
-        distances_f[count, 3] = distance_models.lcss(np.array(train, dtype=np.float), np.array(test, dtype=np.float), np.inf, 0.5)
+
+        if "dtw" in settings_dict["list_of_distance_models"]:
+            distances_f[count, 1] = distance_models.dtw(train, test)
+        else:
+            distances_f[count, 1] = np.nan
+        if "twed" in settings_dict["list_of_distance_models"]:
+            distances_f[count, 2] = distance_models.twed(train,
+                                                         test,
+                                                         nu=settings_dict["twed_nu"],
+                                                         _lambda=settings_dict["twed_lambda"],)
+        else:
+            distances_f[count, 2] = np.nan
+        if "lcss" in settings_dict["list_of_distance_models"]:
+            distances_f[count, 3] = distance_models.lcss(train,
+                                                         test,
+                                                         delta=settings_dict["lcss_delta"],
+                                                         epsilon=settings_dict["lcss_epsilon"])
+        else:
+            distances_f[count, 3] = np.nan
+
         distances_f[count, 4] = train_y[list(train_y.index) == unique_id]["Returns"]
 
     output = pd.DataFrame(distances_f)
@@ -95,31 +111,31 @@ def calculate_distances(train_x, train_y, test_x, train_labels, predict_id):
     return output
 
 
-def multiproc_predict_trades(predict_id, train_labels, test_labels, stocks, returns, type_train, instrument, distance_models_to_run):
+def multiproc_predict_trades(predict_id, train_labels, test_labels, stocks, returns, type_train, settings_dict):
 
-    train_x = stocks[stocks["monthID"].isin(train_labels)]
-    train_y = returns[returns.index.isin(train_labels)]
-    test_x = stocks[stocks["monthID"].isin(test_labels)]
+    train_x = stocks[stocks["monthID"].isin(train_labels)].copy()
+    train_y = returns[returns.index.isin(train_labels)].copy()
+    test_x = stocks[stocks["monthID"].isin(test_labels)].copy()
 
-    distances = calculate_distances(train_x, train_y, test_x, train_labels, predict_id)
+    distances = calculate_distances(train_x, train_y, test_x, train_labels, predict_id, settings_dict)
 
     output = pd.DataFrame(columns=list(["monthID", "instrument", "data_normalization", "distance_model", "stat_model", "result"]))
-    string_distance_models = ["dtw", "twed", "lcss"]
+
     string_stat_models = ["knn", "kstar"]
 
-    for i in range(len(string_distance_models)):
-        for j in range(len(string_stat_models)):
-            if j == 0:
-                output.loc[len(output)] = [predict_id, instrument, type_train, string_distance_models[i], string_stat_models[j],
-                                           stat_models.knn(distances, string_distance_models[i])]
+    for a_distance_model in settings_dict["list_of_distance_models"]:
+        for a_stat_model in string_stat_models:
+            if a_stat_model == "knn":
+                output.loc[len(output)] = [predict_id, settings_dict["instrument"], type_train, a_distance_model, a_stat_model,
+                                           stat_models.knn(distances, a_distance_model)]
             else:
-                output.loc[len(output)] = [predict_id, instrument, type_train, string_distance_models[i], string_stat_models[j],
-                                           stat_models.kstar(distances, string_distance_models[i])]
+                output.loc[len(output)] = [predict_id, settings_dict["instrument"], type_train, a_distance_model, a_stat_model,
+                                           stat_models.kstar(distances, a_distance_model)]
 
     return output
 
 
-def predict_trades(type_train, stocks, returns, instrument, distance_models_to_run, months_out_of_sample=60):
+def predict_trades(type_train, stocks, returns, settings_dict, months_out_of_sample=60):
 
     if type_train == "None":
         train_labels = np.unique(stocks["monthID"])[:-months_out_of_sample]
@@ -134,7 +150,6 @@ def predict_trades(type_train, stocks, returns, instrument, distance_models_to_r
         raise TypeError("No/Wrong type_train chosen.")
 
     labels = np.append(train_labels, test_labels)
-
     output = pd.concat(Parallel(n_jobs=-1)(
         delayed(multiproc_predict_trades)
         (
@@ -144,37 +159,50 @@ def predict_trades(type_train, stocks, returns, instrument, distance_models_to_r
             stocks,
             returns,
             type_train,
-            instrument,
-            distance_models_to_run
-        ) for i in trange(len(test_labels), desc="".join([instrument, " ", type_train]))))
+            settings_dict
+        ) for i in trange(len(test_labels), desc="".join([settings_dict["instrument"], " ", type_train]))))
 
     return output
 
 
-def main(instrument, distance_models_to_run):
+def main(settings_dict):
 
-    months_out_of_sample = 120
-    instrument_file = "data/stock_dfs/{}.csv".format(instrument)
-    next_month_returns_file = "data/returns/{}.csv".format(instrument)
+    instrument_file = "data/stock_dfs/{}.csv".format(settings_dict["instrument"])
+    next_month_returns_file = "data/returns/{}.csv".format(settings_dict["instrument"])
 
     stocks_f, returns_f = read_data(instrument_file, next_month_returns_file)
 
-    trade_predictions = [predict_trades(normalization_type, stocks_f, returns_f, instrument, distance_models_to_run, months_out_of_sample=months_out_of_sample) for normalization_type in normalization_types]
+    trade_predictions = [predict_trades(
+        normalization_type,
+        stocks_f,
+        returns_f,
+        settings_dict,
+        months_out_of_sample=settings_dict["months_out_of_sample"]) for normalization_type in settings_dict["normalization_types"]]
 
     if not os.path.exists('data/predictions'):
         os.makedirs('data/predictions')
 
-    out_filename = "data/predictions/{}_predictions.csv".format(instrument)
+    out_filename = "data/predictions/{}_predictions.csv".format(settings_dict["instrument"])
 
     df_merged = reduce(lambda left, right: pd.merge(left, right, how='outer'), trade_predictions)
     pd.DataFrame.to_csv(df_merged, out_filename, sep=',', na_rep='.', index=False)
 
 
-yahoo_indexes = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225"]
-normalization_types = ["Index", "Normalization"]  # ["None", "Difference", "Index"]
-list_of_distance_models = ["DTW", "TWED", "LCSS"]
+yahoo_indexes = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225"]  # yahoo finance tickers
+normalization_types_c = ["Index", "Normalization"]  # ["None", "Difference", "Index", "Normalization"]
+list_of_distance_models_c = ["dtw", "twed", "lcss"]  # ["dtw", "twed", "lcss"]
+
+# sample config
+config = {"twed_nu": 1,
+          "twed_lambda": 0.001,
+          "lcss_epsilon": 0.5,
+          "lcss_delta": np.inf,
+          "list_of_distance_models": list_of_distance_models_c,
+          "normalization_types": normalization_types_c,
+          "months_out_of_sample": 120,
+          "instrument": "^GSPC"}
 
 if __name__ == '__main__':
-
     for stock_index in yahoo_indexes:
-        main(stock_index, list_of_distance_models)
+        config["instrument"] = stock_index
+        main(config)
