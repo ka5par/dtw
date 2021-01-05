@@ -23,23 +23,25 @@ def create_date_from_month_id(month_id):
     return [dt.datetime(years[i], months[i], 1) for i in range(len(years))]
 
 
+def calculate_actual_returns(orders, returns):
+    actual_returns = returns.copy()
+    actual_returns["Returns"] = returns.Returns.shift(1)
+    return pd.merge(orders, actual_returns, how="left", on="monthID")
+
+
 def main(stock_index):
 
     next_returns = pd.read_csv("data/returns/{}.csv".format(stock_index))
     b_s_orders = pd.read_csv("data/predictions/{}_predictions.csv".format(stock_index))
 
-    # Correct the returns to actual returns
-    actual_returns = next_returns.copy()
-    actual_returns["Returns"] = next_returns.Returns.shift(1)
-
-    b_s_orders = pd.merge(b_s_orders, actual_returns, how="left", on="monthID")
+    b_s_orders = calculate_actual_returns(b_s_orders, next_returns)
+    b_s_orders["Date"] = create_date_from_month_id(b_s_orders["monthID"])
+    month_id = np.unique(b_s_orders["monthID"])
 
     # Instead of multi-index using a "label" column.
     b_s_orders["Labels"] = b_s_orders["data_normalization"] + " " + b_s_orders["distance_model"] + " " + b_s_orders["stat_model"]
     mask = b_s_orders["Labels"] == b_s_orders["Labels"][0]
     baseline_cum_returns = convert_orders_to_cum_return(np.ones(len(b_s_orders[mask])), np.array(b_s_orders[mask]["Returns"]))
-
-    b_s_orders["Date"] = create_date_from_month_id(b_s_orders["monthID"])
 
     # Calculate the cumulative returns of all the outputs.
     b_s_orders["cum_returns"] = 0
@@ -54,8 +56,6 @@ def main(stock_index):
 
                 b_s_orders.loc[mask, "cum_returns"] = convert_orders_to_cum_return(b_s_orders[mask]["result"].values,
                                                                                    b_s_orders[mask]["Returns"].values)
-
-    month_id = np.unique(b_s_orders["monthID"])
 
     # Plot the cumulative returns
     if not os.path.exists('data/plots'):
@@ -104,7 +104,8 @@ def main(stock_index):
         }
 
         accuracy_table = accuracy_table.append(temp_dict, ignore_index=True)
-        accuracy_table.to_csv("data/summary_tables/{}".format(stock_index))
+
+    accuracy_table.to_csv("data/summary_tables/{}".format(stock_index))
 
 
 yahoo_indexes = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225"]
@@ -113,3 +114,5 @@ dict_indexes = {"^GSPC": "S&P 500", "^DJI": "Dow Jones Industrial Average", "^GD
 if __name__ == '__main__':
     for yahoo_index in yahoo_indexes:
         main(yahoo_index)
+
+
