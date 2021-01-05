@@ -128,10 +128,8 @@ def multiproc_predict_trades(predict_id, train_labels, test_labels, stocks, retu
 
     output = pd.DataFrame(columns=list(["monthID", "instrument", "data_normalization", "distance_model", "stat_model", "result"]))
 
-    string_stat_models = ["knn", "kstar"]
-
     for a_distance_model in settings_dict["list_of_distance_models"]:
-        for a_stat_model in string_stat_models:
+        for a_stat_model in settings_dict["stat_models"]:
             if a_stat_model == "knn":
                 output.loc[len(output)] = [predict_id, settings_dict["instrument"], type_train, a_distance_model, a_stat_model,
                                            stat_models.knn(distances, a_distance_model)]
@@ -200,12 +198,13 @@ normalization_types_c = ["Index", "Normalization"]  # ["None", "Difference", "In
 list_of_distance_models_c = ["dtw", "twed", "lcss"]  # ["dtw", "twed", "lcss"]
 
 # sample config
-config = {"twed_nu": 1,
-          "twed_lambda": 0.001,
+config = {"twed_nu": 0.25,
+          "twed_lambda": 0.1,
           "lcss_epsilon": 0.5,
-          "lcss_delta": np.inf,
+          "lcss_delta": "variable",
           "list_of_distance_models": list_of_distance_models_c,
           "normalization_types": normalization_types_c,
+          "stat_models": ["knn"],
           "months_out_of_sample": 120,
           "instrument": "^GSPC"}
 

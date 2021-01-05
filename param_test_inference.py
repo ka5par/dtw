@@ -89,5 +89,3 @@ if __name__ == '__main__':
         main(param)
         plot_scatter(param, "accuracy", "knn")
         plot_scatter(param, "profitability", "knn")
-        plot_scatter(param, "accuracy", "kstar")
-        plot_scatter(param, "profitability", "kstar")
