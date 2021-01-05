@@ -109,10 +109,27 @@ def main(stock_index):
 
 
 yahoo_indexes = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225"]
-dict_indexes = {"^GSPC": "S&P 500", "^DJI": "Dow Jones Industrial Average", "^GDAXI": "DAX30", "^FCHI": "CAC 40", "^N225": "Nikkei 225"}
+commodity_indexes = ["Brent Oil", "Natural Gas", "Gasoline RBOB", "Carbon Emissions", "Gold", "Copper", "London Wheat"]
+dict_indexes = {"^GSPC": "S&P 500",
+                "^DJI": "Dow Jones Industrial Average",
+                "^GDAXI": "DAX30",
+                "^FCHI": "CAC 40",
+                "^N225": "Nikkei 225",
+                "Brent Oil": "Brent",
+                "Natural Gas": "NG",
+                "Gasoline RBOB": "RBOB",
+                "Carbon Emissions": "CO2",
+                "Gold": "Gold",
+                "Copper": "Copper",
+                "London Wheat": "Wheat"
+                }
 
 if __name__ == '__main__':
-    for yahoo_index in yahoo_indexes:
-        main(yahoo_index)
+    # for yahoo_index in yahoo_indexes:
+    #     main(yahoo_index)
+    for commodity in commodity_indexes:
+        main(commodity)
+
+
 
 
