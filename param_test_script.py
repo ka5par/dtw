@@ -6,8 +6,6 @@ import prediction
 
 def main(instrument):
 
-    normalization_types_c = ["Index"]  # ["None", "Difference", "Index"]
-    list_of_distance_models_c = ["lcss"]
     instrument_file = "data/stock_dfs/{}.csv".format(instrument)
     next_month_returns_file = "data/returns/{}.csv".format(instrument)
 
@@ -31,7 +29,7 @@ def main(instrument):
         normalization_types=["Index"],
         months_out_of_sample=120,
         instrument=instrument,
-        stat_models="knn"
+        stat_models=["knn"]
     )
 
     # TWED
@@ -57,7 +55,7 @@ def main(instrument):
 
             main_df = main_df.append(b_s_orders)
 
-    main_df.to_csv("data/{}_twed_test.csv".format(instrument))
+    main_df.to_csv("data/param_test/{}_twed_test.csv".format(instrument))
 
     # LCSS
 
@@ -83,7 +81,7 @@ def main(instrument):
 
             main_df = main_df.append(b_s_orders)
 
-    main_df.to_csv("data/{}_lcss_test.csv".format(instrument))
+    main_df.to_csv("data/param_test/{}_lcss_test.csv".format(instrument))
 
 
 commodity_indexes = ["Brent Oil", "Natural Gas", "Gasoline RBOB", "Carbon Emissions", "Gold", "Copper", "London Wheat"]
