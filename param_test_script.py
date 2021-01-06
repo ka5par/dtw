@@ -81,6 +81,9 @@ def main(instrument):
 
             main_df = main_df.append(b_s_orders)
 
+    if not os.path.exists('data/param_test/'):
+        os.makedirs('data/param_test/')
+
     main_df.to_csv("data/param_test/{}_lcss_test.csv".format(instrument))
 
 
