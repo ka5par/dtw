@@ -198,8 +198,8 @@ def main(settings_dict):
     pd.DataFrame.to_csv(df_merged, out_filename, sep=',', na_rep='.', index=False)
 
 
-yahoo_indexes = ["^GSPC"]  # yahoo finance tickers
-normalization_types_c = ["Index"]  # ["None", "Difference", "Index", "Normalization"]
+yahoo_indexes = ["^GSPC","^DJI", "^GDAXI"] # yahoo finance tickers
+normalization_types_c = ["Index","Normalization"]  # ["None", "Difference", "Index", "Normalization"]
 list_of_distance_models_c = ["corrd", "dtw"]  # ["dtw", "twed", "lcss"]
 #tickers_investing = ["Brent Oil", "Natural Gas", "Gasoline RBOB", "Carbon Emissions", "Gold", "Copper", "London Wheat"]
 
@@ -211,7 +211,7 @@ config = {"twed_nu": 0.25,
           "list_of_distance_models": list_of_distance_models_c,
           "normalization_types": normalization_types_c,
           "stat_models": ["knn"],
-          "months_out_of_sample": 12,
+          "months_out_of_sample": 120,
           "instrument": "^GSPC"}
 
 if __name__ == '__main__':
