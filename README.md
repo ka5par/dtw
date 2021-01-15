@@ -1,4 +1,4 @@
-# Trading with
+# Pattern based trading with similarity measures
 Pattern matching trading algorithms which compare the performance of different similarity measures such as DTW/TWED/LCSS/Corr. 
 The distances calculated by the similarity measures are used as an input for KNN.
 
