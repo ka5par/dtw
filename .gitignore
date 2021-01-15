@@ -2,3 +2,4 @@ data
 *.pdf
 sound_*
 .idea/*
+presentation.py

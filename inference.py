@@ -64,19 +64,20 @@ def main(stock_index):
     # Top 5
     top_list = np.array(b_s_orders[b_s_orders["monthID"] == month_id[-1]].sort_values(by=["cum_returns"], ascending=False).head(5)["Labels"])
     plt.figure(figsize=(12, 12))
-    for spec_label in np.unique(b_s_orders["Labels"]):
+    distance_models = np.unique(b_s_orders["distance_model"])
+    for i, spec_label in enumerate(np.unique(b_s_orders["Labels"])):
         mask = b_s_orders["Labels"] == spec_label
         if spec_label in top_list:
-            plt.plot(b_s_orders.Date[mask], b_s_orders.cum_returns[mask], label=spec_label, linewidth=2)
-            plt.annotate(spec_label, xy=(plt.xticks()[0][-1] + 0.7, b_s_orders.cum_returns[mask].iloc[-1]))
+            plt.plot(b_s_orders.Date[mask], b_s_orders.cum_returns[mask], label=distance_models[i], linewidth=1)
+            plt.annotate(distance_models[i], xy=(plt.xticks()[0][-1] + 0.7, b_s_orders.cum_returns[mask].iloc[-1]))
         else:
             plt.plot(b_s_orders.Date[mask], b_s_orders.cum_returns[mask], label=spec_label, alpha=0.3, linestyle='--', linewidth=1)
 
-    plt.plot(b_s_orders.Date[mask], baseline_cum_returns, label="Baseline", alpha=0.5, linestyle="-", linewidth=3, color="r")
+    plt.plot(b_s_orders.Date[mask], baseline_cum_returns, label="index", alpha=1, linestyle="-", linewidth=3, color="r")
 
     plt.legend()
-    plt.title("Cumulative returns of {}".format(dict_indexes[stock_index]))
-    plt.ylabel("Cumulative returns (%)")
+    plt.title("Total returns {}".format(dict_indexes[stock_index]))
+    plt.ylabel("Total returns (%)")
     plt.savefig('data/plots/cumulative_returns_{}.png'.format(stock_index))
 
     if not os.path.exists('data/summary_tables'):
@@ -93,13 +94,16 @@ def main(stock_index):
         predictions = np.array(b_s_orders[mask]["result"]) > 0
         profitability = np.array(b_s_orders[mask]["cum_returns"])[-1]
 
+        standard_deviation_of_excess_return = np.std(np.array(b_s_orders[mask]["cum_returns"]) - baseline_cum_returns)
+        print(standard_deviation_of_excess_return)
         temp_dict = {
             'stock_index': dict_indexes[stock_index],
             'data_normalization': b_s_orders[mask]["data_normalization"].values[-1],
             'distance_model': b_s_orders[mask]["distance_model"].values[-1],
             'stat_model': b_s_orders[mask]["stat_model"].values[-1],
             'accuracy': accuracy_score(perfect, predictions),
-            'f1': f1_score(perfect, predictions),
+            'std_excess': standard_deviation_of_excess_return,
+            'sharpe_ratio': profitability/standard_deviation_of_excess_return,
             'profitability': profitability
         }
 
@@ -109,7 +113,7 @@ def main(stock_index):
 
 
 yahoo_indexes = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225"]
-commodity_indexes = ["Brent Oil", "Natural Gas", "Gasoline RBOB", "Carbon Emissions", "Gold", "Copper", "London Wheat"]
+# commodity_indexes = ["Brent Oil", "Natural Gas", "Gasoline RBOB", "Carbon Emissions", "Gold", "Copper", "London Wheat"]
 dict_indexes = {"^GSPC": "S&P 500",
                 "^DJI": "Dow Jones Industrial Average",
                 "^GDAXI": "DAX30",
@@ -125,11 +129,8 @@ dict_indexes = {"^GSPC": "S&P 500",
                 }
 
 if __name__ == '__main__':
-    # for yahoo_index in yahoo_indexes:
-    #     main(yahoo_index)
-    for commodity in commodity_indexes:
-        main(commodity)
-
-
-
+    for yahoo_index in yahoo_indexes:
+        main(yahoo_index)
+    # for commodity in commodity_indexes:
+    #     main(commodity)
 

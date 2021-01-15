@@ -2,14 +2,12 @@ import numpy as np
 import pandas as pd
 import inference
 from sklearn.metrics import accuracy_score
-from mpl_toolkits import mplot3d
 from matplotlib import pyplot as plt
 
 plt.style.use(['fivethirtyeight'])
 
 
-def plot_scatter(param, value, sm):
-
+def plot_scatter(param, value, sm, instrument):
     accuracy_table = pd.read_csv("data/param_test/{}_{}_test_acc_table.csv".format(instrument, param))
     mask = accuracy_table["stat_model"] == sm
     if param == "twed":
@@ -23,7 +21,7 @@ def plot_scatter(param, value, sm):
 
     my_cmap = plt.get_cmap('PiYG')
 
-    plt.figure(figsize=(6, 6))
+    plt.figure(figsize=(10, 10))
     plt.scatter(param1, param2, c=accuracy_table[mask][value], cmap=my_cmap, s=100)
     if param == "twed":
         plt.xscale('log')
@@ -33,7 +31,7 @@ def plot_scatter(param, value, sm):
     plt.title(sm + " " + param + " " + value + " with different parameters.")
     plt.savefig('data/plots/test_scatter/{}_{}_{}_{}_param.png'.format(instrument, sm, param, value))
     if value == "accuracy":
-        plt.figure(figsize=(6, 6))
+        plt.figure(figsize=(10, 10))
         plt.scatter(accuracy_table[mask][value], accuracy_table[mask]["profitability"])
         plt.xlabel(value)
         plt.ylabel("profitability")
@@ -59,7 +57,7 @@ def main(param, instrument):
     for a_label in np.unique(b_s_orders["Labels"]):
         mask = b_s_orders["Labels"] == a_label
         b_s_orders.loc[mask, "cum_returns"] = inference.convert_orders_to_cum_return(b_s_orders[mask]["result"].values,
-                                                                      b_s_orders[mask]["Returns"].values)
+                                                                                     b_s_orders[mask]["Returns"].values)
 
         perfect = np.array(b_s_orders[mask]["Returns"]) > 0
         predictions = np.array(b_s_orders[mask]["result"]) > 0
@@ -80,7 +78,7 @@ def main(param, instrument):
     accuracy_table.to_csv("data/param_test/{}_{}_test_acc_table.csv".format(instrument, param))
 
 
-params = ["twed", "lcss"]  # ["twed", "lcss"]
+distance_metrics = ["twed", "lcss"]  # ["twed", "lcss"]
 
 dict_indexes = {"^GSPC": "S&P 500",
                 "^DJI": "Dow Jones Industrial Average",
@@ -98,8 +96,8 @@ dict_indexes = {"^GSPC": "S&P 500",
 
 instruments = ["Brent Oil", "Natural Gas", "Gasoline RBOB", "Carbon Emissions", "Gold", "Copper", "London Wheat"]
 if __name__ == '__main__':
-    for instrument in instruments:
-        for param in params:
-            main(param, instrument)
-            plot_scatter(param, "accuracy", "knn")
-            plot_scatter(param, "profitability", "knn")
+    for comm in instruments:
+        for distance_metric in distance_metrics:
+            main(distance_metric, comm)
+            plot_scatter(distance_metric, "accuracy", "knn", comm)
+            plot_scatter(distance_metric, "profitability", "knn", comm)

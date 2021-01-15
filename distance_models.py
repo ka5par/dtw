@@ -5,7 +5,7 @@ import numpy as np
 # Dynamic Time Warp
 # https://github.com/MJeremy2017/machine-learning-models/blob/master/Dynamic-Time-Warping/dynamic-time-warping.py
 @jit(forceobj=True)
-def dtw(s, t, window=15):
+def dtw(s, t, window=5):
     n, m = len(s), len(t)
 
     w = np.max([window, abs(n - m)])
@@ -124,3 +124,18 @@ def check_arrays(s, t):
     if t.ndim == 1:
         t = np.reshape(t, (1, t.size))
     return s, t
+
+
+@jit(forceobj=True)
+def corrd(s, t):
+    n, m = len(s), len(t)
+    t_tmp = t.copy()
+    s_tmp = s.copy()
+    if m == n:
+        return np.corrcoef(s, t)[0][1]  # If same length
+    elif m > n:
+        t_tmp[n] = np.mean(t[n:])
+        return np.corrcoef(s_tmp, t_tmp[:n])[0][1]  # If t is larger
+    else:
+        s_tmp[m] = np.mean(s[m:])
+        return np.corrcoef(s_tmp[:m], t_tmp)[0][1]  # If s is larger

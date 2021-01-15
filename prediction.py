@@ -8,13 +8,6 @@ from tqdm import trange
 from functools import reduce
 from joblib import Parallel, delayed
 
-# Step 1 separate each month of each stock.
-# Calculate the distance A with DTW, DDTW, IDTW with the last month as the input and compares it against all other months.
-# Choose n closest months, predict next month's return using KNN given distance and return.
-# If next month's return is positive, buy one stock. Otherwise sell one unit.
-# Calculate real return.
-# Proceed to next month and repeat x times.
-
 
 def read_data(prices_file, returns_file):
 
@@ -77,7 +70,7 @@ def normalizing(df_stocks, tv_split):
 
 
 def calculate_distances(train_x, train_y, test_x, train_labels, predict_id, settings_dict):
-    distances_f = np.zeros([len(train_labels), 5])
+    distances_f = np.zeros([len(train_labels), 6])
 
     for count, unique_id in enumerate(train_labels):
 
@@ -92,7 +85,7 @@ def calculate_distances(train_x, train_y, test_x, train_labels, predict_id, sett
             settings_dict["lcss_epsilon"] = np.min([np.std(train), np.std(test)])  # Smallest standard deviation of train/test
 
         if "dtw" in settings_dict["list_of_distance_models"]:
-            distances_f[count, 1] = distance_models.dtw(train, test)
+            distances_f[count, 1] = distance_models.dtw(train, test, window=15)
         else:
             distances_f[count, 1] = np.nan
         if "twed" in settings_dict["list_of_distance_models"]:
@@ -110,10 +103,15 @@ def calculate_distances(train_x, train_y, test_x, train_labels, predict_id, sett
         else:
             distances_f[count, 3] = np.nan
 
-        distances_f[count, 4] = train_y[list(train_y.index) == unique_id]["Returns"]
+        if "corrd" in settings_dict["list_of_distance_models"]:
+            distances_f[count, 4] = distance_models.corrd(train, test)
+        else:
+            distances_f[count, 4] = np.nan
+
+        distances_f[count, 5] = train_y[list(train_y.index) == unique_id]["Returns"]
 
     output = pd.DataFrame(distances_f)
-    output.columns = ["monthID", "dtw", "twed", "lcss", "returns"]
+    output.columns = ["monthID", "dtw", "twed", "lcss","corrd", "returns"]
 
     return output
 
@@ -193,16 +191,16 @@ def main(settings_dict):
     pd.DataFrame.to_csv(df_merged, out_filename, sep=',', na_rep='.', index=False)
 
 
-yahoo_indexes = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225"]  # yahoo finance tickers
+yahoo_indexes = ["^GSPC", "^DJI", "^GDAXI", "^N225", "^FCHI"]  # yahoo finance tickers
 normalization_types_c = ["Index"]  # ["None", "Difference", "Index", "Normalization"]
-list_of_distance_models_c = ["dtw", "twed", "lcss"]  # ["dtw", "twed", "lcss"]
+list_of_distance_models_c = ["dtw", "corrd", "twed", "lcss"]  # ["dtw", "corrd", "twed", "lcss"]
 tickers_investing = ["Brent Oil", "Natural Gas", "Gasoline RBOB", "Carbon Emissions", "Gold", "Copper", "London Wheat"]
 
 # sample config
-config = {"twed_nu": 0.25,
+config = {"twed_nu": 0.001,
           "twed_lambda": 0.1,
-          "lcss_epsilon": 0.5,
-          "lcss_delta": "variable",
+          "lcss_epsilon": 0.1,
+          "lcss_delta": 5,
           "list_of_distance_models": list_of_distance_models_c,
           "normalization_types": normalization_types_c,
           "stat_models": ["knn"],
@@ -210,9 +208,10 @@ config = {"twed_nu": 0.25,
           "instrument": "^GSPC"}
 
 if __name__ == '__main__':
-    # for stock_index in yahoo_indexes:
-    #     config["instrument"] = stock_index
-    #     main(config)
-    for commodity in tickers_investing:
-        config["instrument"] = commodity
+    for stock_index in yahoo_indexes:
+        config["instrument"] = stock_index
         main(config)
+    # For commodity, rolling futures have to be applied with one day/variable early rollover to make any sense.
+    # for commodity in tickers_investing:
+    #     config["instrument"] = commodity
+    #     main(config)

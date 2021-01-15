@@ -27,9 +27,8 @@ def get_data_from_yahoo(tickers, years=15, force_overwrite=True):
 
     start = dt.datetime.now() - dt.timedelta(days=years*365)
     end = dt.datetime.now()
-    print("Downloading from yahoo.")
 
-    for i in trange(len(tickers)):
+    for i in trange(len(tickers), desc="Downloading from yahoo."):
         ticker = tickers[i]
         if not os.path.exists('data/stock_dfs/{}.csv'.format(ticker)) or force_overwrite:
             df = web.get_data_yahoo(str(ticker), start, end)
@@ -43,7 +42,7 @@ def get_data_from_yahoo(tickers, years=15, force_overwrite=True):
 def get_data_from_investing(tickers, countries, years=15, t_type="index"):
 
     if t_type != "index" and t_type != "commodity":
-        print("Currently, only work with indexes from investing.com.")
+        print("Currently, only work with indexes&commodities from investing.com.")
         return
 
     if not os.path.exists('data/stock_dfs'):
@@ -51,10 +50,9 @@ def get_data_from_investing(tickers, countries, years=15, t_type="index"):
 
     start = dt.datetime.now() - dt.timedelta(days=years * 365)
     end = dt.datetime.now()
-    print("Downloading from investing.com")
 
     if t_type == "index":
-        for i in trange(len(tickers)):
+        for i in trange(len(tickers), desc="Downloading from investing.com"):
             ticker = tickers[i]
             if not os.path.exists('data/stock_dfs/{}.csv'.format(ticker)):
                 df = investpy.get_index_historical_data(index=ticker,
@@ -68,7 +66,7 @@ def get_data_from_investing(tickers, countries, years=15, t_type="index"):
 
     elif t_type == "commodity":
 
-        for i in trange(len(tickers)):
+        for i in trange(len(tickers), desc="Downloading from investing.com"):
 
             ticker = tickers[i]
             df = investpy.get_commodity_historical_data(commodity=ticker,
