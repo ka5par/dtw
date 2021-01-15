@@ -2,11 +2,11 @@
 Pattern matching trading algorithms which compare the performance of different similarity measures such as DTW/TWED/LCSS/Corr. 
 The distances calculated by the similarity measures are used as an input for KNN.
 
-Methodology is based on the papers by Nagakawa, Imamura and Yoshida [^1][^2]. 
+Methodology is based on the papers by Nagakawa, Imamura and Yoshida [^1] & [^2]. 
 
-[^1]: https://doi.org/10.1002/ecj.12140
+[^1]:https://doi.org/10.1002/ecj.12140
 
-[^2]: https://doi.org/10.1007/978-3-319-93794-6_7
+[^2]:https://doi.org/10.1007/978-3-319-93794-6_7
 
 -----------------------
 
