@@ -24,7 +24,10 @@ Files:
 Output: Calculates buy&sell predictions for OOS.
 
 `inference.py` - Input: data in the folders&format provided by `prediction.py`. Output: Total returns plots and performance tables (total returns, alpha, accuracy) per input.
+
+
 -----------------------
+
 Functions:
 
 `stat_model.py` - Contains statistical models (KNN, K*NN)
