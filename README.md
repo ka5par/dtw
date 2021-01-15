@@ -14,6 +14,8 @@ Basic instructions to run this script:
 
 Create a new python env and install all the dependencies from requirements.txt.
 
+-----------------------
+
 Files:
 
 `update_data.py` - Downloads Yahoo/Investing data. Output is a csv file with columns Date & Close. 
@@ -22,13 +24,19 @@ Files:
 Output: Calculates buy&sell predictions for OOS.
 
 `inference.py` - Input: data in the folders&format provided by `prediction.py`. Output: Total returns plots and performance tables (total returns, alpha, accuracy) per input.
-
+-----------------------
 Functions:
 
 `stat_model.py` - Contains statistical models (KNN, K*NN)
 
 `distance_model.py` -  Contains distance models (DTW, TWED, LCSS, Corr)
 
+-----------------------
 Research:
 
 `param_test*` - parameter tests ran for TWED&LCSS 
+
+-----------------------
+Results:
+
+![image of results](https://raw.githubusercontent.com/ka5par/dtw/master/results.jpg)
