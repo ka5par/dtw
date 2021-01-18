@@ -1,7 +1,9 @@
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import accuracy_score
 from matplotlib import pyplot as plt
-plt.style.use(['fivethirtyeight'])
 
+plt.style.use(['seaborn-poster'])
+
+import utils
 import datetime as dt
 import numpy as np
 import pandas as pd
@@ -29,14 +31,31 @@ def calculate_actual_returns(orders, returns):
     return pd.merge(orders, actual_returns, how="left", on="monthID")
 
 
+def vote_based_b_s(df, list_of_distance_metrics, list_of_stat_models):
+    df = df
+
+    for monthID in np.unique(df["monthID"]):
+        mask = (df["distance_model"].isin(list_of_distance_metrics)) & (df["monthID"] == monthID)
+        temp = df[mask].iloc[0]
+        temp.distance_model = "combination"
+        temp.result = df[mask].result.mode()[0]
+        df = pd.concat([df, temp.to_frame().T])
+    return df
+
+
 def main(stock_index):
 
-    next_returns = pd.read_csv("data/returns/{}.csv".format(stock_index))
-    b_s_orders = pd.read_csv("data/predictions/{}_predictions.csv".format(stock_index))
+    next_returns, b_s_orders = utils.read_data(stock_index, True)
 
+    # Calculate actual returns.
     b_s_orders = calculate_actual_returns(b_s_orders, next_returns)
     b_s_orders["Date"] = create_date_from_month_id(b_s_orders["monthID"])
     month_id = np.unique(b_s_orders["monthID"])
+
+    # Create an equal vote based b_s order.
+    list_of_distance_metrics = ["dtw", "twed", "lcss"]
+    list_of_stat_models = ["knn"]
+    b_s_orders = vote_based_b_s(b_s_orders, list_of_distance_metrics, list_of_stat_models).reset_index()
 
     # Instead of multi-index using a "label" column.
     b_s_orders["Labels"] = b_s_orders["data_normalization"] + " " + b_s_orders["distance_model"] + " " + b_s_orders["stat_model"]
@@ -63,7 +82,7 @@ def main(stock_index):
 
     # Top 5
     top_list = np.array(b_s_orders[b_s_orders["monthID"] == month_id[-1]].sort_values(by=["cum_returns"], ascending=False).head(5)["Labels"])
-    plt.figure(figsize=(12, 12))
+    plt.figure(figsize=(10, 5))
     distance_models = np.unique(b_s_orders["distance_model"])
     for i, spec_label in enumerate(np.unique(b_s_orders["Labels"])):
         mask = b_s_orders["Labels"] == spec_label
@@ -94,16 +113,13 @@ def main(stock_index):
         predictions = np.array(b_s_orders[mask]["result"]) > 0
         profitability = np.array(b_s_orders[mask]["cum_returns"])[-1]
 
-        standard_deviation_of_excess_return = np.std(np.array(b_s_orders[mask]["cum_returns"]) - baseline_cum_returns)
-        print(standard_deviation_of_excess_return)
         temp_dict = {
             'stock_index': dict_indexes[stock_index],
             'data_normalization': b_s_orders[mask]["data_normalization"].values[-1],
             'distance_model': b_s_orders[mask]["distance_model"].values[-1],
             'stat_model': b_s_orders[mask]["stat_model"].values[-1],
             'accuracy': accuracy_score(perfect, predictions),
-            'std_excess': standard_deviation_of_excess_return,
-            'sharpe_ratio': profitability/standard_deviation_of_excess_return,
+            'baseline': baseline_cum_returns[-1],
             'profitability': profitability
         }
 
@@ -112,25 +128,12 @@ def main(stock_index):
     accuracy_table.to_csv("data/summary_tables/{}".format(stock_index))
 
 
-yahoo_indexes = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225"]
-# commodity_indexes = ["Brent Oil", "Natural Gas", "Gasoline RBOB", "Carbon Emissions", "Gold", "Copper", "London Wheat"]
-dict_indexes = {"^GSPC": "S&P 500",
-                "^DJI": "Dow Jones Industrial Average",
-                "^GDAXI": "DAX30",
-                "^FCHI": "CAC 40",
-                "^N225": "Nikkei 225",
-                "Brent Oil": "Brent",
-                "Natural Gas": "NG",
-                "Gasoline RBOB": "RBOB",
-                "Carbon Emissions": "CO2",
-                "Gold": "Gold",
-                "Copper": "Copper",
-                "London Wheat": "Wheat"
-                }
+instruments = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225"] #["Brent Oil", "Natural Gas", "Gasoline RBOB", "Carbon Emissions", "Gold", "Copper", "London Wheat"]
+
+dict_indexes = utils.read_config("actual_names")
 
 if __name__ == '__main__':
-    for yahoo_index in yahoo_indexes:
-        main(yahoo_index)
-    # for commodity in commodity_indexes:
-    #     main(commodity)
+
+    for instrument in instruments:
+        main(instrument)
 

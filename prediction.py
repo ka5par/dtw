@@ -3,19 +3,11 @@ import pandas as pd
 import os
 import stat_models
 import distance_models
+import utils
 
 from tqdm import trange
 from functools import reduce
 from joblib import Parallel, delayed
-
-
-def read_data(prices_file, returns_file):
-
-    stocks = pd.read_csv(prices_file, index_col=0)
-    stocks["monthID"] = pd.to_datetime(stocks.index.values).year * 100 + pd.to_datetime(stocks.index.values).month
-    returns = pd.read_csv(returns_file, index_col=0)
-
-    return stocks, returns
 
 
 def difference(df_stocks, tv_split=60):
@@ -91,15 +83,15 @@ def calculate_distances(train_x, train_y, test_x, train_labels, predict_id, sett
         if "twed" in settings_dict["list_of_distance_models"]:
             distances_f[count, 2] = distance_models.twed(train,
                                                          test,
-                                                         nu=settings_dict["twed_nu"],
-                                                         _lambda=settings_dict["twed_lambda"],)
+                                                         nu=float(settings_dict["twed_nu"]),
+                                                         _lambda=float(settings_dict["twed_lambda"]),)
         else:
             distances_f[count, 2] = np.nan
         if "lcss" in settings_dict["list_of_distance_models"]:
             distances_f[count, 3] = distance_models.lcss(train,
                                                          test,
-                                                         delta=settings_dict["lcss_delta"],
-                                                         epsilon=settings_dict["lcss_epsilon"])
+                                                         delta=int(settings_dict["lcss_delta"]),
+                                                         epsilon=float(settings_dict["lcss_epsilon"]))
         else:
             distances_f[count, 3] = np.nan
 
@@ -116,7 +108,7 @@ def calculate_distances(train_x, train_y, test_x, train_labels, predict_id, sett
     return output
 
 
-def multiproc_predict_trades(predict_id, train_labels, test_labels, stocks, returns, type_train, settings_dict):
+def multiprocessing_predict_trades(predict_id, train_labels, test_labels, stocks, returns, type_train, settings_dict):
 
     train_x = stocks[stocks["monthID"].isin(train_labels)].copy()
     train_y = returns[returns.index.isin(train_labels)].copy()
@@ -154,7 +146,7 @@ def predict_trades(type_train, stocks, returns, settings_dict, months_out_of_sam
 
     labels = np.append(train_labels, test_labels)
     output = pd.concat(Parallel(n_jobs=-1)(
-        delayed(multiproc_predict_trades)
+        delayed(multiprocessing_predict_trades)
         (
             test_labels[i],
             labels[:(-months_out_of_sample + i + 1)],
@@ -168,19 +160,30 @@ def predict_trades(type_train, stocks, returns, settings_dict, months_out_of_sam
     return output
 
 
+# Perfomance metric = `accuracy` / `total_returns`
+def take_best_parameters(config_f, performance_metric='profitability'):
+    try:
+        best_twed = pd.read_csv("data/param_test/{}_{}_test_acc_table.csv".format(config_f["instrument"], "twed")).sort_values(performance_metric, ascending=False)[['nu', 'lambda']].head(1).values[0]  # nu / lambda
+        best_lcss = pd.read_csv("data/param_test/{}_{}_test_acc_table.csv".format(config_f["instrument"], "lcss")).sort_values(performance_metric, ascending=False)[['epsilon', 'delta']] .head(1).values[0]  # Epsilon / Delta
+        config_f["twed_nu"] = best_twed[0]
+        config_f["twed_lambda"] = best_twed[1]
+        config_f["lcss_epsilon"] = best_lcss[0]
+        config_f["lcss_delta"] = best_lcss[1]
+        return config_f
+    except FileNotFoundError:
+        return config_f
+
+
 def main(settings_dict):
 
-    instrument_file = "data/stock_dfs/{}.csv".format(settings_dict["instrument"])
-    next_month_returns_file = "data/returns/{}.csv".format(settings_dict["instrument"])
-
-    stocks_f, returns_f = read_data(instrument_file, next_month_returns_file)
+    stocks, returns = utils.read_data(settings_dict["instrument"])
 
     trade_predictions = [predict_trades(
         normalization_type,
-        stocks_f,
-        returns_f,
+        stocks,
+        returns,
         settings_dict,
-        months_out_of_sample=settings_dict["months_out_of_sample"]) for normalization_type in settings_dict["normalization_types"]]
+        months_out_of_sample= int(settings_dict["months_out_of_sample"])) for normalization_type in settings_dict["normalization_types"]]
 
     if not os.path.exists('data/predictions'):
         os.makedirs('data/predictions')
@@ -191,27 +194,15 @@ def main(settings_dict):
     pd.DataFrame.to_csv(df_merged, out_filename, sep=',', na_rep='.', index=False)
 
 
-yahoo_indexes = ["^GSPC", "^DJI", "^GDAXI", "^N225", "^FCHI"]  # yahoo finance tickers
-normalization_types_c = ["Index"]  # ["None", "Difference", "Index", "Normalization"]
-list_of_distance_models_c = ["dtw", "corrd", "twed", "lcss"]  # ["dtw", "corrd", "twed", "lcss"]
-tickers_investing = ["Brent Oil", "Natural Gas", "Gasoline RBOB", "Carbon Emissions", "Gold", "Copper", "London Wheat"]
-
-# sample config
-config = {"twed_nu": 0.001,
-          "twed_lambda": 0.1,
-          "lcss_epsilon": 0.1,
-          "lcss_delta": 5,
-          "list_of_distance_models": list_of_distance_models_c,
-          "normalization_types": normalization_types_c,
-          "stat_models": ["knn"],
-          "months_out_of_sample": 120,
-          "instrument": "^GSPC"}
+instruments = ["^GSPC", "^DJI", "^GDAXI", "^N225", "^FCHI"]  # ["Brent Oil", "Natural Gas", "Gasoline RBOB", "Carbon Emissions", "Gold", "Copper", "London Wheat"]
 
 if __name__ == '__main__':
-    for stock_index in yahoo_indexes:
+
+    config = utils.read_config("run_parameters")
+
+    config["normalization_types"] = ["Index"]
+
+    for stock_index in instruments:
         config["instrument"] = stock_index
+        config = take_best_parameters(config)
         main(config)
-    # For commodity, rolling futures have to be applied with one day/variable early rollover to make any sense.
-    # for commodity in tickers_investing:
-    #     config["instrument"] = commodity
-    #     main(config)

@@ -3,8 +3,9 @@ import pandas as pd
 import inference
 from sklearn.metrics import accuracy_score
 from matplotlib import pyplot as plt
+import utils
 
-plt.style.use(['fivethirtyeight'])
+plt.style.use(['seaborn-poster'])
 
 
 def plot_scatter(param, value, sm, instrument):
@@ -39,9 +40,11 @@ def plot_scatter(param, value, sm, instrument):
         plt.savefig('data/plots/test_scatter/{}_{}_{}_prof_acc.png'.format(instrument, sm, param))
 
 
-def main(param, instrument):
-    next_returns = pd.read_csv("data/returns/{}.csv".format(instrument))
+def main(param, instrument, write_to_file=True):
+
+    next_returns, _ = utils.read_data(instrument, predictions=True)
     b_s_orders = pd.read_csv("data/param_test/{}_{}_test.csv".format(instrument, param))
+
     b_s_orders = inference.calculate_actual_returns(b_s_orders, next_returns)
 
     b_s_orders["Labels"] = b_s_orders["stat_model"] + " " + \
@@ -75,29 +78,24 @@ def main(param, instrument):
         }
         accuracy_table = accuracy_table.append(temp_dict, ignore_index=True)
 
-    accuracy_table.to_csv("data/param_test/{}_{}_test_acc_table.csv".format(instrument, param))
+    if write_to_file:
+        accuracy_table.to_csv("data/param_test/{}_{}_test_acc_table.csv".format(instrument, param))
+        return
+    else:
+        return accuracy_table.sort("profitability", ascending=False).loc[0], param
 
 
 distance_metrics = ["twed", "lcss"]  # ["twed", "lcss"]
 
-dict_indexes = {"^GSPC": "S&P 500",
-                "^DJI": "Dow Jones Industrial Average",
-                "^GDAXI": "DAX30",
-                "^FCHI": "CAC 40",
-                "^N225": "Nikkei 225",
-                "Brent Oil": "Brent",
-                "Natural Gas": "NG",
-                "Gasoline RBOB": "RBOB",
-                "Carbon Emissions": "CO2",
-                "Gold": "Gold",
-                "Copper": "Copper",
-                "London Wheat": "Wheat"
-                }
+dict_indexes = utils.read_config("actual_names")
 
-instruments = ["Brent Oil", "Natural Gas", "Gasoline RBOB", "Carbon Emissions", "Gold", "Copper", "London Wheat"]
+instruments = ["^GSPC", "^DJI", "^GDAXI", "^N225", "^FCHI"]  # ["Brent Oil", "Natural Gas", "Gasoline RBOB", "Carbon Emissions", "Gold", "Copper", "London Wheat"]
+
+
 if __name__ == '__main__':
+
     for comm in instruments:
         for distance_metric in distance_metrics:
             main(distance_metric, comm)
-            plot_scatter(distance_metric, "accuracy", "knn", comm)
-            plot_scatter(distance_metric, "profitability", "knn", comm)
+            # plot_scatter(distance_metric, "accuracy", "knn", comm)
+            # plot_scatter(distance_metric, "profitability", "knn", comm)
