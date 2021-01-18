@@ -37,7 +37,7 @@ def convert(x):
         try:
             return int(x)
         except ValueError:
-            pass
+            return x
     else:
         return x
 

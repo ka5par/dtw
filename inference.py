@@ -43,7 +43,7 @@ def vote_based_b_s(df, list_of_distance_metrics, list_of_stat_models):
     return df
 
 
-def main(stock_index):
+def main(stock_index, vote_based=False):
 
     next_returns, b_s_orders = utils.read_data(stock_index, True)
 
@@ -53,9 +53,10 @@ def main(stock_index):
     month_id = np.unique(b_s_orders["monthID"])
 
     # Create an equal vote based b_s order.
-    list_of_distance_metrics = ["dtw", "twed", "lcss"]
-    list_of_stat_models = ["knn"]
-    b_s_orders = vote_based_b_s(b_s_orders, list_of_distance_metrics, list_of_stat_models).reset_index()
+    if vote_based:
+        list_of_distance_metrics = ["dtw", "twed", "lcss"]
+        list_of_stat_models = ["knn"]
+        b_s_orders = vote_based_b_s(b_s_orders, list_of_distance_metrics, list_of_stat_models).reset_index()
 
     # Instead of multi-index using a "label" column.
     b_s_orders["Labels"] = b_s_orders["data_normalization"] + " " + b_s_orders["distance_model"] + " " + b_s_orders["stat_model"]
@@ -133,7 +134,6 @@ instruments = ["^GSPC", "^DJI", "^GDAXI", "^FCHI", "^N225"] #["Brent Oil", "Natu
 dict_indexes = utils.read_config("actual_names")
 
 if __name__ == '__main__':
-
     for instrument in instruments:
         main(instrument)
 
